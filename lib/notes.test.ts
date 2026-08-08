@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { deriveTitle, localDateKey, normalizeTags, snippetFromBody } from "./notes";
+import {
+  deriveTitle,
+  highlightRuns,
+  localDateKey,
+  normalizeTags,
+  snippetFromBody,
+} from "./notes";
 
 describe("deriveTitle", () => {
   it("uses the first non-empty line", () => {
@@ -35,6 +41,26 @@ describe("snippetFromBody", () => {
   });
   it("caps at 160 characters", () => {
     expect(snippetFromBody(`t\n${"x".repeat(300)}`).length).toBe(160);
+  });
+});
+
+describe("highlightRuns", () => {
+  it("splits into alternating plain and matched runs", () => {
+    expect(highlightRuns("Release checklist", "check")).toEqual(["Release ", "check", "list"]);
+  });
+  it("matches case-insensitively and keeps the original casing", () => {
+    expect(highlightRuns("Release Checklist", "check")).toEqual(["Release ", "Check", "list"]);
+  });
+  it("finds every occurrence", () => {
+    expect(highlightRuns("aXaXa", "x")).toEqual(["a", "X", "a", "X", "a"]);
+  });
+  it("returns one plain run for an empty or unmatched query", () => {
+    expect(highlightRuns("Release", "")).toEqual(["Release"]);
+    expect(highlightRuns("Release", "  ")).toEqual(["Release"]);
+    expect(highlightRuns("Release", "zzz")).toEqual(["Release"]);
+  });
+  it("rejoins to the original text", () => {
+    expect(highlightRuns("Meeting notes — infra sync", "n").join("")).toBe("Meeting notes — infra sync");
   });
 });
 

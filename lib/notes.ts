@@ -28,6 +28,27 @@ export function snippetFromBody(body: string): string {
     .slice(0, 160);
 }
 
+/**
+ * Split `text` into alternating plain/matched runs for `query`, so a row can
+ * mark search hits without dangerous HTML. Odd indices are the matches; an
+ * empty or unmatched query yields a single plain run.
+ */
+export function highlightRuns(text: string, query: string): string[] {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) return [text];
+  const haystack = text.toLowerCase();
+  const runs: string[] = [];
+  let cursor = 0;
+  for (;;) {
+    const hit = haystack.indexOf(needle, cursor);
+    if (hit === -1) break;
+    runs.push(text.slice(cursor, hit), text.slice(hit, hit + needle.length));
+    cursor = hit + needle.length;
+  }
+  runs.push(text.slice(cursor));
+  return runs;
+}
+
 /** The local calendar date as YYYY-MM-DD (daily-note title key). */
 export function localDateKey(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");

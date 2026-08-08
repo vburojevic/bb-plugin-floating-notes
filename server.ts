@@ -28,6 +28,7 @@ export const rpcContract = defineRpcContract({
         tag: z.string().optional(),
         view: z.enum(["active", "trash"]).optional(),
         threadId: z.string().optional(),
+        sort: z.enum(["updated", "created", "title"]).optional(),
         limit: z.number().int().positive().max(500).optional(),
       })
       .strict(),
@@ -51,6 +52,10 @@ export const rpcContract = defineRpcContract({
       })
       .strict(),
     output: z.object({ note: noteSchema }),
+  },
+  dailyNote: {
+    input: z.null(),
+    output: z.object({ note: noteSchema, created: z.boolean() }),
   },
   updateNote: {
     input: z
@@ -159,6 +164,7 @@ export default async function plugin(bb: BbPluginApi) {
     tag?: string;
     view?: "active" | "trash";
     threadId?: string;
+    sort?: "updated" | "created" | "title";
     limit?: number;
   }): Note[] => {
     const view = filter.view ?? "active";
@@ -174,10 +180,14 @@ export default async function plugin(bb: BbPluginApi) {
       clauses.push("origin_thread_id = ?");
       params.push(filter.threadId);
     }
+    // Title sorting happens in JS: the title is derived from the body, not stored.
+    const sort = filter.sort ?? "updated";
     const order =
       view === "trash"
         ? "ORDER BY trashed_at DESC"
-        : "ORDER BY pinned DESC, updated_at DESC";
+        : sort === "created"
+          ? "ORDER BY pinned DESC, created_at DESC"
+          : "ORDER BY pinned DESC, updated_at DESC";
     const rows = db
       .prepare(`SELECT * FROM notes WHERE ${clauses.join(" AND ")} ${order}`)
       .all(...params) as NoteRow[];
@@ -185,6 +195,13 @@ export default async function plugin(bb: BbPluginApi) {
     if (filter.tag) {
       const tag = filter.tag.toLowerCase();
       notes = notes.filter((note) => note.tags.includes(tag));
+    }
+    if (sort === "title" && view !== "trash") {
+      notes.sort(
+        (a, b) =>
+          Number(b.pinned) - Number(a.pinned) ||
+          a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+      );
     }
     return notes.slice(0, filter.limit ?? 500);
   };
@@ -299,22 +316,24 @@ export default async function plugin(bb: BbPluginApi) {
   const getOrCreateDaily = async (origin: {
     projectId?: string | null;
     threadId?: string | null;
-  }): Promise<Note> => {
+  }): Promise<{ note: Note; created: boolean }> => {
     const key = localDateKey(new Date());
     const existing = listNotes({ tag: "daily" }).find((note) => note.title === key);
-    if (existing) return existing;
-    return createNote({
+    if (existing) return { note: existing, created: false };
+    const note = await createNote({
       body: `# ${key}\n`,
       tags: ["daily"],
       originProjectId: origin.projectId ?? null,
       originThreadId: origin.threadId ?? null,
     });
+    return { note, created: true };
   };
 
   bb.rpc.register(rpcContract, {
     listNotes: (input) => ({ notes: listNotes(input), tags: tagCounts(), counts: noteCounts() }),
     getNote: ({ id }) => ({ note: getById(id) }),
     createNote: async (input) => ({ note: await createNote(input) }),
+    dailyNote: () => getOrCreateDaily({}),
     updateNote: (input) => ({ note: updateNote(input) }),
     trashNote: ({ id }) => ({ note: setTrashed(id, true) }),
     restoreNote: ({ id }) => ({ note: setTrashed(id, false) }),
@@ -369,7 +388,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   const cliUsage = [
     "Usage: bb notes <command>",
-    "  list [--tag <tag>] [--trash] [--limit <n>]   List notes (pinned first)",
+    "  list [--tag t] [--trash] [--sort s] [--limit n]  List notes (pinned first)",
     "  search <query>                               Full-text search",
     "  read <id>                                    Print a note (id prefixes ok)",
     "  add <text…> [--tags a,b]                     Create a note",
@@ -385,7 +404,7 @@ export default async function plugin(bb: BbPluginApi) {
     name: "notes",
     summary: "Quick markdown notes (list, search, add, edit, tag, pin, trash)",
     commands: [
-      { name: "list", summary: "List notes (pinned first); --tag, --trash, --limit", usage: "bb notes list [--tag t] [--trash] [--limit n]" },
+      { name: "list", summary: "List notes (pinned first); --tag, --trash, --sort updated|created|title, --limit", usage: "bb notes list [--tag t] [--trash] [--sort updated|created|title] [--limit n]" },
       { name: "search", summary: "Full-text search over note bodies", usage: "bb notes search <query>" },
       { name: "read", summary: "Print one note's body and metadata", usage: "bb notes read <id>" },
       { name: "add", summary: "Create a note from the given text", usage: "bb notes add <text…> [--tags a,b]" },
@@ -419,7 +438,16 @@ export default async function plugin(bb: BbPluginApi) {
             const tag = takeFlag("tag");
             const trash = hasFlag("trash");
             const limit = Number(takeFlag("limit") ?? "50");
-            const notes = listNotes({ tag, view: trash ? "trash" : "active", limit });
+            const sortFlag = takeFlag("sort");
+            if (sortFlag && !["updated", "created", "title"].includes(sortFlag)) {
+              return { exitCode: 1, stderr: "--sort must be updated, created, or title" };
+            }
+            const notes = listNotes({
+              tag,
+              view: trash ? "trash" : "active",
+              sort: sortFlag as "updated" | "created" | "title" | undefined,
+              limit,
+            });
             return {
               exitCode: 0,
               stdout: notes.length > 0 ? notes.map(formatLine).join("\n") : "No notes.",
@@ -459,7 +487,7 @@ export default async function plugin(bb: BbPluginApi) {
             return { exitCode: 0, stdout: `Created ${note.id}: ${note.title}` };
           }
           case "daily": {
-            const note = await getOrCreateDaily({
+            const { note } = await getOrCreateDaily({
               projectId: ctx.projectId ?? null,
               threadId: ctx.threadId ?? null,
             });

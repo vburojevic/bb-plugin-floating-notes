@@ -29,6 +29,9 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -44,14 +47,40 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { usePointerCoarse } from "@/components/ui/hooks/use-pointer-coarse";
-import { snippetFromBody } from "@/lib/notes";
+import { highlightRuns, snippetFromBody } from "@/lib/notes";
 import { cn } from "@/lib/utils";
 
 const PANEL_PATH = "notes";
 const THREAD_PANEL_ACTION_ID = "thread-notes";
+const SORT_STORAGE_KEY = "bb-plugin-notes:sort";
 
 type TagCount = { name: string; count: number };
 type NoteCounts = { active: number; trashed: number };
+type SortKey = "updated" | "created" | "title";
+
+const SORT_LABELS: Record<SortKey, string> = {
+  updated: "Last edited",
+  created: "Date created",
+  title: "Title",
+};
+
+/** New-note starting points. `blank` opens straight into an empty editor. */
+const TEMPLATES: Array<{ id: string; label: string; icon: "File" | "ListTodo" | "MessageSquare"; body: string; tags?: string[] }> = [
+  { id: "blank", label: "Blank note", icon: "File", body: "" },
+  {
+    id: "checklist",
+    label: "Checklist",
+    icon: "ListTodo",
+    body: "# Checklist\n\n- [ ] \n- [ ] \n- [ ] \n",
+  },
+  {
+    id: "meeting",
+    label: "Meeting notes",
+    icon: "MessageSquare",
+    body: "# Meeting — \n\n**Attendees:** \n\n## Notes\n\n\n## Actions\n\n- [ ] \n",
+    tags: ["meeting"],
+  },
+];
 
 /** The plugin's sticky-note glyph (mirrors assets/icon.svg). */
 function NotesGlyph({ className }: { className?: string }) {
@@ -136,6 +165,7 @@ function useNotes(filter: {
   tag?: string;
   view?: "active" | "trash";
   threadId?: string;
+  sort?: SortKey;
 }) {
   const rpc = useRpc<typeof rpcContract>();
   const [notes, setNotes] = useState<Note[] | null>(null);
@@ -152,6 +182,7 @@ function useNotes(filter: {
         ...(current.tag ? { tag: current.tag } : {}),
         ...(current.view ? { view: current.view } : {}),
         ...(current.threadId ? { threadId: current.threadId } : {}),
+        ...(current.sort ? { sort: current.sort } : {}),
       });
       setNotes(result.notes);
       setTags(result.tags);
@@ -163,7 +194,7 @@ function useNotes(filter: {
 
   useEffect(() => {
     void reload();
-  }, [reload, filter.query, filter.tag, filter.view, filter.threadId]);
+  }, [reload, filter.query, filter.tag, filter.view, filter.threadId, filter.sort]);
   useRealtime("notes", () => void reload());
 
   return { notes, tags, counts, reload };
@@ -203,6 +234,25 @@ function EmptyState({
   );
 }
 
+/** Text with the active search term marked, without dangerous HTML. */
+function Highlight({ text, query }: { text: string; query: string }) {
+  const runs = highlightRuns(text, query);
+  if (runs.length === 1) return <>{text}</>;
+  return (
+    <>
+      {runs.map((run, index) =>
+        index % 2 === 1 ? (
+          <mark key={index} className="rounded-[2px] bg-primary/25 text-inherit">
+            {run}
+          </mark>
+        ) : (
+          run
+        ),
+      )}
+    </>
+  );
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="px-3 pb-1 pt-3 text-[11px] font-medium text-muted-foreground first:pt-1">
@@ -222,7 +272,9 @@ function TagChips({
 }) {
   if (tags.length === 0) return null;
   return (
-    <div className="flex gap-1 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    // The mask fades the last chip out at the scroll edge, so an overflowing
+    // strip reads as scrollable instead of clipped against the sort control.
+    <div className="flex gap-1 overflow-x-auto pb-0.5 pr-2 [mask-image:linear-gradient(to_right,#000_calc(100%-1.25rem),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {tags.map((tag) => (
         <button
           key={tag.name}
@@ -246,6 +298,7 @@ function TagChips({
 function NoteRow({
   note,
   view,
+  query,
   selected,
   onSelect,
   onTogglePin,
@@ -254,6 +307,7 @@ function NoteRow({
 }: {
   note: Note;
   view: "active" | "trash";
+  query: string;
   selected: boolean;
   onSelect: () => void;
   onTogglePin: () => void;
@@ -278,7 +332,9 @@ function NoteRow({
           {view === "active" && note.pinned ? (
             <Icon name="Pin" className="size-3 shrink-0 text-muted-foreground" aria-label="Pinned" />
           ) : null}
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{note.title}</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+            <Highlight text={note.title} query={query} />
+          </span>
           <span
             className={cn(
               "shrink-0 text-[11px] tabular-nums text-muted-foreground",
@@ -289,7 +345,9 @@ function NoteRow({
           </span>
         </span>
         {body ? (
-          <span className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{body}</span>
+          <span className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+            <Highlight text={body} query={query} />
+          </span>
         ) : null}
         {note.tags.length > 0 ? (
           <span className="flex flex-wrap gap-1 pt-0.5">
@@ -737,10 +795,15 @@ function NotesNavPanel({ subPath }: { subPath: string }) {
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [view, setView] = useState<"active" | "trash">("active");
   const [creating, setCreating] = useState(false);
+  const [sort, setSort] = useState<SortKey>(() => {
+    const stored = localStorage.getItem(SORT_STORAGE_KEY);
+    return stored === "created" || stored === "title" ? stored : "updated";
+  });
   const { notes, tags, counts } = useNotes({
     query: query || undefined,
     tag: view === "active" ? (activeTag ?? undefined) : undefined,
     view,
+    sort,
   });
   const selectedId = subPath === "" ? null : subPath;
   const open = (id: string | null) => nav.toPluginPanel(PANEL_PATH, { subPath: id ?? "" });
@@ -750,17 +813,38 @@ function NotesNavPanel({ subPath }: { subPath: string }) {
     if (activeTag && !tags.some((tag) => tag.name === activeTag)) setActiveTag(null);
   }, [tags, activeTag]);
 
-  const createNote = async () => {
+  const revealNote = (id: string) => {
+    setView("active");
+    setSearch("");
+    setActiveTag(null);
+    open(id);
+  };
+
+  const createNote = async (template?: { body: string; tags?: string[] }) => {
     if (creating) return;
     setCreating(true);
     try {
-      const { note } = await rpc.call("createNote", { body: "" });
-      setView("active");
-      setSearch("");
-      setActiveTag(null);
-      open(note.id);
+      const { note } = await rpc.call("createNote", {
+        body: template?.body ?? "",
+        ...(template?.tags ? { tags: template.tags } : {}),
+      });
+      revealNote(note.id);
     } catch {
       toast.error("Could not create note");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const openDaily = async () => {
+    if (creating) return;
+    setCreating(true);
+    try {
+      const { note, created } = await rpc.call("dailyNote");
+      revealNote(note.id);
+      if (!created) toast.success("Opened today's note");
+    } catch {
+      toast.error("Could not open today's note");
     } finally {
       setCreating(false);
     }
@@ -833,6 +917,7 @@ function NotesNavPanel({ subPath }: { subPath: string }) {
       key={note.id}
       note={note}
       view={view}
+      query={query}
       selected={note.id === selectedId}
       onSelect={() => open(note.id)}
       {...rowActions(note)}
@@ -884,15 +969,50 @@ function NotesNavPanel({ subPath }: { subPath: string }) {
                 ) : null}
               </div>
               {view === "active" ? (
-                <Button
-                  size="sm"
-                  className="h-8 shrink-0 gap-1 px-2.5"
-                  disabled={creating}
-                  onClick={() => void createNote()}
-                >
-                  <Icon name="Plus" className="size-3.5" />
-                  New
-                </Button>
+                <div className="flex shrink-0 items-center">
+                  <Button
+                    size="sm"
+                    className="h-8 gap-1 rounded-r-none px-2.5"
+                    disabled={creating}
+                    onClick={() => void createNote()}
+                  >
+                    <Icon name="Plus" className="size-3.5" />
+                    New
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        aria-label="New note from a template"
+                        className="h-8 w-6 rounded-l-none border-l border-background/25 px-0"
+                        disabled={creating}
+                      >
+                        <Icon name="ChevronDown" className="size-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>New note</DropdownMenuLabel>
+                      <DropdownMenuGroup>
+                        {TEMPLATES.map((template) => (
+                          <DropdownMenuItem
+                            key={template.id}
+                            onSelect={() =>
+                              void createNote({ body: template.body, ...(template.tags ? { tags: template.tags } : {}) })
+                            }
+                          >
+                            <Icon name={template.icon} className="size-4" />
+                            {template.label}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuGroup>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onSelect={() => void openDaily()}>
+                        <Icon name="Calendar" className="size-4" />
+                        Today&rsquo;s note
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               ) : (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -929,11 +1049,49 @@ function NotesNavPanel({ subPath }: { subPath: string }) {
               )}
             </div>
             {view === "active" ? (
-              <TagChips
-                tags={tags}
-                activeTag={activeTag}
-                onToggle={(tag) => setActiveTag(activeTag === tag ? null : tag)}
-              />
+              <div className="flex items-center gap-1">
+                <div className="min-w-0 flex-1">
+                  <TagChips
+                    tags={tags}
+                    activeTag={activeTag}
+                    onToggle={(tag) => setActiveTag(activeTag === tag ? null : tag)}
+                  />
+                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 shrink-0 gap-1 px-1.5 text-[11px] text-muted-foreground"
+                      aria-label={`Sort notes — currently ${SORT_LABELS[sort].toLowerCase()}`}
+                    >
+                      <Icon name="ArrowUpDown" className="size-3" />
+                      {SORT_LABELS[sort]}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={sort}
+                      onValueChange={(next) => {
+                        const key = next as SortKey;
+                        setSort(key);
+                        try {
+                          localStorage.setItem(SORT_STORAGE_KEY, key);
+                        } catch {
+                          // A blocked storage quota must not break sorting.
+                        }
+                      }}
+                    >
+                      {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                        <DropdownMenuRadioItem key={key} value={key}>
+                          {SORT_LABELS[key]}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             ) : null}
           </div>
           <div className="min-h-0 flex-1 border-t border-border">
@@ -969,10 +1127,16 @@ function NotesNavPanel({ subPath }: { subPath: string }) {
                   title="No notes yet"
                   hint="Capture ideas, save chat snippets, and reference them with @note in any thread."
                   action={
-                    <Button size="sm" disabled={creating} onClick={() => void createNote()}>
-                      <Icon name="Plus" className="size-3.5" />
-                      New note
-                    </Button>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <Button size="sm" disabled={creating} onClick={() => void createNote()}>
+                        <Icon name="Plus" className="size-3.5" />
+                        New note
+                      </Button>
+                      <Button variant="outline" size="sm" disabled={creating} onClick={() => void openDaily()}>
+                        <Icon name="Calendar" className="size-3.5" />
+                        Today&rsquo;s note
+                      </Button>
+                    </div>
                   }
                 />
               )
