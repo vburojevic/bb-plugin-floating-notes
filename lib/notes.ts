@@ -64,3 +64,77 @@ export function normalizeTags(tags: string[]): string[] {
   }
   return [...seen].sort();
 }
+
+/** Checklist stats over markdown task lines ("- [ ]", "* [x]", "1. [X] …"). */
+export function countTasks(body: string): { total: number; done: number } {
+  let total = 0;
+  let done = 0;
+  for (const line of body.split("\n")) {
+    // Keep byte-identical semantics with lib/editor/tasks.ts TASK_LINE_RE, or
+    // the editor's progress ring and the list's disagree — notably on a
+    // freshly typed `- [ ]` with nothing after the box yet.
+    const match = /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[( |x|X)\](?=[ \t]|$)/.exec(line);
+    if (match === null) continue;
+    total += 1;
+    if (match[1] !== " ") done += 1;
+  }
+  return { total, done };
+}
+
+/**
+ * Sanitize raw user input into an FTS5 MATCH expression: every term is quoted
+ * (embedded double quotes doubled) and joined with implicit AND, and the last
+ * term becomes a prefix query so results keep up while the user types.
+ * Returns "" when the input holds no terms.
+ */
+export function ftsQuery(raw: string): string {
+  const terms = raw
+    .trim()
+    .split(/\s+/)
+    .filter((term) => term.length > 0);
+  return terms
+    .map((term, index) => {
+      const quoted = `"${term.replaceAll('"', '""')}"`;
+      return index === terms.length - 1 ? `${quoted}*` : quoted;
+    })
+    .join(" ");
+}
+
+/**
+ * Inline #hashtags in a body. Requires a letter right after the `#`, so
+ * markdown headings (`# Title` — space follows), issue refs (`#123`), and hex
+ * colors never match. Tags are 2–32 chars of [a-z0-9_-], lowercased.
+ */
+export function extractHashtags(body: string): string[] {
+  const tags = new Set<string>();
+  for (const match of body.matchAll(/(?:^|[\s(])#([a-z][a-z0-9_-]{1,31})\b/gim)) {
+    tags.add(match[1]!.toLowerCase());
+  }
+  return [...tags].sort();
+}
+
+/** Append text on its own line, aware of a single trailing newline. */
+export function appendToBody(body: string, text: string): string {
+  if (body.length === 0) return text;
+  return body.endsWith("\n") ? `${body}${text}` : `${body}\n${text}`;
+}
+
+/** Align rows into two-space-guttered columns for plain-text CLI tables. */
+export function alignColumns(rows: string[][]): string {
+  const widths: number[] = [];
+  for (const row of rows) {
+    row.forEach((cell, index) => {
+      widths[index] = Math.max(widths[index] ?? 0, cell.length);
+    });
+  }
+  return rows
+    .map((row) =>
+      row
+        .map((cell, index) =>
+          index === row.length - 1 ? cell : cell.padEnd(widths[index] ?? 0),
+        )
+        .join("  ")
+        .trimEnd(),
+    )
+    .join("\n");
+}

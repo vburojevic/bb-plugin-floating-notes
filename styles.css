@@ -1,0 +1,317 @@
+/*
+ * Everything Tailwind utilities cannot express for the floating surfaces.
+ * All rules are scoped under .bb-fn-* so nothing here can reach the rest of
+ * the bb app. Colors use bb tokens or light-dark() — this plugin's Tailwind
+ * build has no `.dark` variant wired to bb's theme, so light-dark() is the
+ * only correct way to be theme-aware (see docs/redesign.md).
+ */
+
+/* ------------------------------------------------------------- main window */
+
+/*
+ * Show/hide is one authored motion moment: the window grows out of its
+ * bottom-right corner — the opposite corner from the floating terminal, so
+ * running both never buries one under the other. Only opacity and transform
+ * animate, so the layout box is final from the first frame.
+ */
+.bb-fn-window {
+  transform-origin: 100% 100%;
+  /* Fallback only: lib/z-order.ts assigns inline z from a [53, 53+n) band,
+     most recently touched on top. Overlays sit at 65+, bb dialogs at 70. */
+  z-index: 55;
+}
+
+.bb-fn-window[data-state="closed"] {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(8px, 12px, 0) scale(0.97);
+  transition:
+    opacity 130ms cubic-bezier(0.4, 0, 1, 1),
+    transform 130ms cubic-bezier(0.4, 0, 1, 1),
+    visibility 0s linear 130ms;
+  visibility: hidden;
+}
+
+.bb-fn-window[data-state="open"] {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  transition:
+    opacity 190ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 190ms cubic-bezier(0.16, 1, 0.3, 1);
+  visibility: visible;
+}
+
+/* --------------------------------------------------------------- stickies */
+
+/*
+ * A sticky is a small card: title bar (drag handle) + editor. Its tint comes
+ * from the palette below; the text stays on bb's foreground token so every
+ * color keeps contrast in both themes.
+ */
+.bb-fn-sticky {
+  transform-origin: 50% 0%;
+  z-index: 53;
+  background: var(--bb-fn-tint, var(--card));
+}
+
+.bb-fn-sticky[data-state="closed"] {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, -6px, 0) scale(0.97);
+  transition:
+    opacity 130ms cubic-bezier(0.4, 0, 1, 1),
+    transform 130ms cubic-bezier(0.4, 0, 1, 1),
+    visibility 0s linear 130ms;
+  visibility: hidden;
+}
+
+.bb-fn-sticky[data-state="open"] {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  transition:
+    opacity 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  visibility: visible;
+}
+
+/* Collapsed: just the title bar. Height comes from content, not the frame. */
+.bb-fn-sticky[data-collapsed="true"] {
+  height: auto !important;
+}
+
+.bb-fn-sticky[data-collapsed="true"] .bb-fn-sticky-body {
+  display: none;
+}
+
+/* The tint pairs. Bar gets a slightly stronger wash of the same hue. */
+.bb-fn-tint-yellow {
+  --bb-fn-tint: light-dark(oklch(0.965 0.055 100), oklch(0.31 0.042 102));
+  --bb-fn-tint-strong: light-dark(oklch(0.93 0.08 100), oklch(0.35 0.05 102));
+  --bb-fn-dot: light-dark(oklch(0.8 0.15 95), oklch(0.75 0.13 98));
+}
+.bb-fn-tint-mint {
+  --bb-fn-tint: light-dark(oklch(0.962 0.045 162), oklch(0.3 0.038 165));
+  --bb-fn-tint-strong: light-dark(oklch(0.928 0.065 162), oklch(0.34 0.046 165));
+  --bb-fn-dot: light-dark(oklch(0.72 0.14 160), oklch(0.72 0.12 162));
+}
+.bb-fn-tint-sky {
+  --bb-fn-tint: light-dark(oklch(0.962 0.04 235), oklch(0.3 0.04 240));
+  --bb-fn-tint-strong: light-dark(oklch(0.93 0.055 235), oklch(0.34 0.05 240));
+  --bb-fn-dot: light-dark(oklch(0.68 0.13 235), oklch(0.7 0.12 238));
+}
+.bb-fn-tint-rose {
+  --bb-fn-tint: light-dark(oklch(0.962 0.042 18), oklch(0.31 0.042 15));
+  --bb-fn-tint-strong: light-dark(oklch(0.93 0.06 18), oklch(0.35 0.05 15));
+  --bb-fn-dot: light-dark(oklch(0.7 0.15 18), oklch(0.72 0.13 16));
+}
+.bb-fn-tint-lavender {
+  --bb-fn-tint: light-dark(oklch(0.963 0.045 296), oklch(0.31 0.045 296));
+  --bb-fn-tint-strong: light-dark(oklch(0.932 0.062 296), oklch(0.35 0.052 296));
+  --bb-fn-dot: light-dark(oklch(0.7 0.13 296), oklch(0.73 0.12 296));
+}
+.bb-fn-tint-peach {
+  --bb-fn-tint: light-dark(oklch(0.963 0.05 55), oklch(0.31 0.042 55));
+  --bb-fn-tint-strong: light-dark(oklch(0.93 0.07 55), oklch(0.35 0.05 55));
+  --bb-fn-dot: light-dark(oklch(0.75 0.14 50), oklch(0.74 0.12 52));
+}
+
+.bb-fn-sticky .bb-fn-sticky-bar {
+  background: var(--bb-fn-tint-strong, transparent);
+}
+
+/* A tinted sticky's editor sits directly on the tint. */
+.bb-fn-sticky .cm-editor {
+  background: transparent;
+}
+
+/* ---------------------------------------------------------- quick capture */
+
+.bb-fn-capture-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  background: color-mix(in oklab, var(--background) 30%, transparent);
+}
+
+.bb-fn-capture {
+  position: fixed;
+  left: 50%;
+  top: 18vh;
+  z-index: 66;
+  width: min(560px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  transform-origin: 50% 0%;
+}
+
+.bb-fn-capture[data-state="open"] {
+  animation: bb-fn-capture-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes bb-fn-capture-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+/* -------------------------------------------------- note picker / palette */
+
+.bb-fn-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  background: color-mix(in oklab, var(--background) 30%, transparent);
+}
+
+.bb-fn-overlay {
+  position: fixed;
+  left: 50%;
+  top: 18vh;
+  z-index: 66;
+  width: min(560px, calc(100vw - 32px));
+  transform: translateX(-50%);
+}
+
+/* The in-window palette covers the window, not the app. */
+.bb-fn-palette {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 16px;
+  background: color-mix(in oklab, var(--card) 55%, transparent);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+/* ------------------------------------------------------------- mobile sheet */
+
+/*
+ * Below bb's compact breakpoint the main window becomes a sheet: it fills the
+ * viewport minus one even inset, measured from the safe area; drag and resize
+ * are never installed. Stickies are not rendered at all at this width — a
+ * 300px card floating over a 390px screen is clutter, and every note is one
+ * tap away inside the sheet.
+ */
+.bb-fn-window[data-layout="sheet"] {
+  --bb-fn-sheet-gap: 10px;
+  --bb-fn-sheet-top: calc(var(--bb-fn-sheet-gap) + env(safe-area-inset-top, 0px));
+  --bb-fn-sheet-bottom: calc(
+    var(--bb-fn-sheet-gap) + env(safe-area-inset-bottom, 0px)
+  );
+
+  left: calc(var(--bb-fn-sheet-gap) + env(safe-area-inset-left, 0px));
+  right: calc(var(--bb-fn-sheet-gap) + env(safe-area-inset-right, 0px));
+  top: calc(var(--bb-fn-viewport-top, 0px) + var(--bb-fn-sheet-top));
+  bottom: auto;
+  width: auto;
+  height: calc(100vh - var(--bb-fn-sheet-top) - var(--bb-fn-sheet-bottom));
+  height: calc(
+    var(--bb-fn-viewport-height, 100dvh) - var(--bb-fn-sheet-top) -
+      var(--bb-fn-sheet-bottom)
+  );
+  transform-origin: 50% 100%;
+}
+
+.bb-fn-window[data-layout="sheet"][data-state="closed"] {
+  transform: translate3d(0, 16px, 0) scale(0.985);
+}
+
+.bb-fn-window[data-layout="sheet"] [data-bb-fn-handle] {
+  cursor: default;
+}
+
+/* The home-indicator inset is already inside the keyboard. */
+.bb-fn-window[data-layout="sheet"][data-keyboard="open"] {
+  --bb-fn-sheet-bottom: var(--bb-fn-sheet-gap);
+}
+
+.bb-fn-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 54;
+  background: color-mix(in oklab, var(--background) 45%, transparent);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .bb-fn-backdrop {
+    background: color-mix(in oklab, var(--background) 22%, transparent);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    backdrop-filter: blur(16px) saturate(140%);
+  }
+}
+
+.bb-fn-backdrop[data-state="closed"] {
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 130ms cubic-bezier(0.4, 0, 1, 1),
+    visibility 0s linear 130ms;
+  visibility: hidden;
+}
+
+.bb-fn-backdrop[data-state="open"] {
+  opacity: 1;
+  transition: opacity 190ms cubic-bezier(0.16, 1, 0.3, 1);
+  visibility: visible;
+}
+
+/* ------------------------------------------------------------------ motion */
+
+@media (prefers-reduced-motion: reduce) {
+  .bb-fn-window[data-state="closed"],
+  .bb-fn-window[data-state="open"],
+  .bb-fn-sticky[data-state="closed"],
+  .bb-fn-sticky[data-state="open"],
+  .bb-fn-backdrop[data-state="closed"],
+  .bb-fn-backdrop[data-state="open"] {
+    transition: none;
+  }
+  .bb-fn-capture[data-state="open"] {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------------------- utilities */
+
+/* The note list scrolls without showing a scrollbar until hovered. */
+.bb-fn-quiet-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.bb-fn-quiet-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.bb-fn-quiet-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bb-fn-quiet-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: var(--border);
+}
+
+/* FTS match highlight in list rows. */
+.bb-fn-match {
+  border-radius: 3px;
+  background: color-mix(in oklab, var(--primary) 22%, transparent);
+  color: var(--foreground);
+}
+
+/* The confetti canvas rides on top of everything, and takes no events. */
+.bb-fn-confetti {
+  position: fixed;
+  inset: 0;
+  z-index: 69;
+  pointer-events: none;
+}
