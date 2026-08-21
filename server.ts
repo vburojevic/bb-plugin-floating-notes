@@ -352,12 +352,61 @@ export default async function plugin(bb: BbPluginApi) {
     let notes = rows.map((row) => ({
       ...rowToNote(row),
       matchSnippet: row.match_snippet ?? null,
+      threadTitle: null as string | null,
     }));
     if (filter.tag !== undefined) {
       const tag = filter.tag.toLowerCase();
       notes = notes.filter((note) => note.tags.includes(tag));
     }
     return notes.slice(0, filter.limit ?? 500);
+  };
+
+  // ---- thread-title enrichment ---------------------------------------------
+  //
+  // A scratchpad, a pinned sticky, or a captured note is bound to a thread;
+  // the UI has to say WHICH one or every scratchpad reads as "Scratchpad".
+  // Titles resolve through bb.sdk.threads.get behind a short cache.
+
+  const THREAD_TITLE_TTL_MS = 60_000;
+  const threadTitleCache = new Map<string, { title: string | null; at: number }>();
+
+  const boundThreadId = (note: ListedNote): string | null =>
+    note.kind === "scratchpad"
+      ? note.originThreadId
+      : (note.pinnedThreadId ?? note.originThreadId);
+
+  const withThreadTitles = async (
+    notes: ListedNote[],
+  ): Promise<ListedNote[]> => {
+    const now = Date.now();
+    const wanted = new Set<string>();
+    for (const note of notes) {
+      const threadId = boundThreadId(note);
+      if (threadId === null) continue;
+      const cached = threadTitleCache.get(threadId);
+      if (cached === undefined || now - cached.at > THREAD_TITLE_TTL_MS) {
+        wanted.add(threadId);
+      }
+    }
+    await Promise.all(
+      [...wanted].map(async (threadId) => {
+        try {
+          const thread = await bb.sdk.threads.get({ threadId });
+          threadTitleCache.set(threadId, { title: thread.title ?? null, at: now });
+        } catch {
+          // Dead thread: remember the miss so we don't retry every list call.
+          threadTitleCache.set(threadId, { title: null, at: now });
+        }
+      }),
+    );
+    return notes.map((note) => {
+      const threadId = boundThreadId(note);
+      if (threadId === null) return note;
+      return {
+        ...note,
+        threadTitle: threadTitleCache.get(threadId)?.title ?? null,
+      };
+    });
   };
 
   const tagCounts = (): Array<{ name: string; count: number }> => {
@@ -661,8 +710,8 @@ export default async function plugin(bb: BbPluginApi) {
   // ---- RPC -----------------------------------------------------------------
 
   bb.rpc.register(rpcContract, {
-    listNotes: (input) => ({
-      notes: listNotes(input),
+    listNotes: async (input) => ({
+      notes: await withThreadTitles(listNotes(input)),
       tags: tagCounts(),
       counts: noteCounts(),
     }),

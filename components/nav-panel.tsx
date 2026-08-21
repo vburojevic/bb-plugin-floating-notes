@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { NoteList } from "@/components/note-list";
+import { displayTitle, NoteList } from "@/components/note-list";
 import { NoteEditor } from "@/components/note-editor";
 import { useNotesState } from "@/lib/hooks";
 import { notesStore, rpc } from "@/lib/store";
@@ -94,6 +94,26 @@ export function NotesNavPanel() {
     }
   }, []);
 
+  const openInbox = useCallback(async () => {
+    try {
+      const note = await notesStore.inboxNote();
+      setView("active");
+      setSelectedId(note.id);
+    } catch {
+      toast.error("Could not open the inbox");
+    }
+  }, []);
+
+  const openDaily = useCallback(async () => {
+    try {
+      const note = await notesStore.dailyNote();
+      setView("active");
+      setSelectedId(note.id);
+    } catch {
+      toast.error("Could not open the daily note");
+    }
+  }, []);
+
   return (
     <div className="flex h-full min-h-0">
       <NoteList
@@ -112,6 +132,8 @@ export function NotesNavPanel() {
         selectedId={selectedId}
         onSelect={setSelectedId}
         onNew={() => void newNote()}
+        onOpenInbox={() => void openInbox()}
+        onOpenDaily={() => void openDaily()}
         onRestore={(id) => void notesStore.restoreNote(id).then(refreshTrash)}
         onPurge={(id) => void notesStore.purgeNote(id).then(refreshTrash)}
         onEmptyTrash={() => void notesStore.emptyTrash().then(refreshTrash)}
@@ -130,7 +152,7 @@ export function NotesNavPanel() {
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex shrink-0 items-center gap-0.5 border-b border-border px-3 py-1.5">
             <span className="min-w-0 flex-1 truncate text-sm font-medium">
-              {selected.title}
+              {displayTitle(selected)}
             </span>
             {view === "trash" ? (
               <>

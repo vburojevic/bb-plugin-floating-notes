@@ -68,14 +68,16 @@ function setState(patch: Partial<NotesState>): void {
   emit();
 }
 
-function asListed(note: Note): ListedNote {
-  return { ...note, matchSnippet: null };
-}
-
 /** Local upsert so a mutation's result lands without waiting for a refresh. */
 function upsert(note: Note): void {
-  const listed = asListed(note);
   const index = state.notes.findIndex((row) => row.id === note.id);
+  // Mutations return bare notes; keep the list-only enrichment (the bound
+  // thread's title) from the row being replaced until the next refresh.
+  const listed: ListedNote = {
+    ...note,
+    matchSnippet: null,
+    threadTitle: index === -1 ? null : state.notes[index]!.threadTitle,
+  };
   const next =
     index === -1
       ? [listed, ...state.notes]

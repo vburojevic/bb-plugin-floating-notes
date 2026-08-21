@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import type { ListedNote } from "@/lib/contract";
+import { displayTitle } from "@/components/note-list";
 import { cn } from "@/lib/utils";
 
 export interface PaletteAction {
@@ -56,12 +57,16 @@ export function Palette({
         run: action.run,
       }));
     const noteRows: Row[] = notes
-      .filter((note) => needle.length === 0 || note.title.toLowerCase().includes(needle))
+      .filter(
+        (note) =>
+          needle.length === 0 ||
+          displayTitle(note).toLowerCase().includes(needle),
+      )
       .slice(0, MAX_NOTE_ROWS)
       .map((note) => ({
         key: `note:${note.id}`,
-        label: note.title,
-        icon: "FileText" as IconName,
+        label: displayTitle(note),
+        icon: (note.kind === "scratchpad" ? "MessageSquare" : "FileText") as IconName,
         run: () => onOpenNote(note.id),
       }));
     return [...actionRows, ...noteRows];

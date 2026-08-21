@@ -60,7 +60,7 @@ function ThreadHeaderNotesButton({
         }
       }}
     >
-      <Icon name="FileText" className="size-4" aria-label="Thread scratchpad" />
+      <Icon name="Edit" className="size-4" aria-label="Thread scratchpad" />
     </Button>
   );
 }

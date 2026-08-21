@@ -10,6 +10,7 @@ import { controller } from "@/lib/controller";
 import { useNotesState } from "@/lib/hooks";
 import { notesStore } from "@/lib/store";
 import { snippetFromBody } from "@/lib/notes";
+import { displayTitle } from "@/components/note-list";
 import type { ListedNote } from "@/lib/contract";
 
 export function ThreadNotesPanel({ threadId }: { threadId: string }) {
@@ -96,7 +97,7 @@ export function ThreadNotesPanel({ threadId }: { threadId: string }) {
                 >
                   <span className="flex items-center gap-1.5">
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                      {note.title}
+                      {displayTitle(note)}
                     </span>
                     <ProgressRing done={note.taskDone} total={note.taskTotal} />
                   </span>

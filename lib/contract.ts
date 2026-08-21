@@ -47,6 +47,12 @@ export type Note = z.infer<typeof noteSchema>;
 /** A list row: the note plus an FTS match snippet when a query matched. */
 export const listedNoteSchema = noteSchema.extend({
   matchSnippet: z.string().nullable(),
+  /**
+   * Title of the thread this note is bound to (a scratchpad's thread, a
+   * pinned sticky's thread, or a captured note's origin), resolved
+   * server-side so every surface can say WHERE a note lives.
+   */
+  threadTitle: z.string().nullable(),
 });
 export type ListedNote = z.infer<typeof listedNoteSchema>;
 

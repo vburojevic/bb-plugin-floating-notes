@@ -21,6 +21,7 @@ import { controller } from "@/lib/controller";
 import { notesStore } from "@/lib/store";
 import { defaultStickyFrame, STICKY_PROFILE } from "@/lib/frame";
 import { noteColorSchema, type ListedNote, type NoteColor } from "@/lib/contract";
+import { displayTitle } from "@/components/note-list";
 import { cn } from "@/lib/utils";
 
 const COLOR_LABEL: Record<NoteColor, string> = {
@@ -99,7 +100,7 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
       ref={rootRef}
       role="dialog"
       aria-modal="false"
-      aria-label={`Sticky note: ${note.title}`}
+      aria-label={`Sticky note: ${displayTitle(note)}`}
       data-state={armed ? "open" : "closed"}
       data-collapsed={note.collapsed ? "true" : "false"}
       className={cn(
@@ -166,20 +167,26 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
         </DropdownMenu>
 
         <span className="min-w-0 flex-1 truncate text-xs font-medium">
-          {note.title}
+          {displayTitle(note)}
         </span>
 
         <ProgressRing done={note.taskDone} total={note.taskTotal} />
 
         <BarButton
           icon={pinned ? "Pin" : "PinOff"}
-          label={pinned ? "Unpin from thread" : "Pin to current thread"}
+          label={
+            pinned
+              ? note.threadTitle !== null
+                ? `Pinned to “${note.threadTitle}” — click to unpin`
+                : "Unpin from thread"
+              : "Pin to current thread"
+          }
           onClick={togglePin}
           subtle={!pinned}
           className={pinned ? "text-primary" : ""}
         />
         <BarButton
-          icon="Maximize2"
+          icon="AppWindow"
           label="Open in notes window"
           onClick={() => controller.showWindow(note.id)}
         />

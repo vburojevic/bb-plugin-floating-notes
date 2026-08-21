@@ -22,7 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport";
-import { NoteList } from "@/components/note-list";
+import { displayTitle, NoteList } from "@/components/note-list";
 import { NoteEditor } from "@/components/note-editor";
 import { Palette, type PaletteAction } from "@/components/palette";
 import { useFloatingFrame } from "@/components/use-floating-frame";
@@ -370,7 +370,7 @@ export function NotesWindow() {
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex shrink-0 items-center gap-0.5 border-b border-border px-2 py-1">
           <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
-            {selected.title}
+            {displayTitle(selected)}
           </span>
           {view === "trash" ? (
             <>
@@ -510,6 +510,15 @@ export function NotesWindow() {
             </span>
           ) : null}
           <span className="min-w-0 flex-1 truncate">
+            {selected.kind === "scratchpad"
+              ? `Thread scratchpad${selected.threadTitle !== null ? ` · ${selected.threadTitle}` : ""} · `
+              : selected.kind === "daily"
+                ? "Daily note · "
+                : selected.kind === "inbox"
+                  ? "Inbox · "
+                  : selected.threadTitle !== null
+                    ? `from ${selected.threadTitle} · `
+                    : ""}
             {selected.taskTotal > 0
               ? `${selected.taskDone}/${selected.taskTotal} tasks · `
               : ""}
@@ -554,36 +563,17 @@ export function NotesWindow() {
           <Icon name="FileText" className="size-4 text-muted-foreground" aria-hidden />
           <span className="text-sm font-medium">Notes</span>
           <span className="min-w-0 flex-1" />
-          <Button
+          {/* Self-labeling: the shortcut IS the button. Inbox and Today
+              moved into the list as labeled rows — no more mystery icons. */}
+          <button
+            type="button"
             data-no-drag=""
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            aria-label="Daily note"
-            onClick={() => void openDaily()}
-          >
-            <Icon name="Calendar" className="size-4" aria-label="Daily note" />
-          </Button>
-          <Button
-            data-no-drag=""
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            aria-label="Inbox"
-            onClick={() => void openInbox()}
-          >
-            <Icon name="Archive" className="size-4" aria-label="Inbox" />
-          </Button>
-          <Button
-            data-no-drag=""
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            aria-label="Palette (⌘K)"
             onClick={() => setPaletteOpen(true)}
+            title="Commands — search actions and notes"
+            className="rounded border border-border px-1.5 py-0.5 font-mono text-[11px] leading-4 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            <Icon name="Sort" className="size-4" aria-label="Command palette" />
-          </Button>
+            ⌘K
+          </button>
           <Button
             data-no-drag=""
             variant="ghost"
@@ -604,6 +594,8 @@ export function NotesWindow() {
             query={query}
             onQueryChange={setQuery}
             searchInputRef={searchInputRef}
+            onOpenInbox={() => void openInbox()}
+            onOpenDaily={() => void openDaily()}
             activeTag={activeTag}
             onTagChange={setActiveTag}
             view={view}
