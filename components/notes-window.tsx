@@ -411,12 +411,23 @@ export function NotesWindow() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="size-6" aria-label="Color">
-                    <Icon name="Palette" className="size-3.5" aria-label="Note color" />
+                    {selected.color !== null ? (
+                      <span
+                        className={cn(
+                          "size-3 rounded-full border border-foreground/20",
+                          `bb-fn-tint-${selected.color}`,
+                        )}
+                        style={{ background: "var(--bb-fn-dot)" }}
+                        aria-label="Note color"
+                      />
+                    ) : (
+                      <Icon name="Palette" className="size-3.5" aria-label="Note color" />
+                    )}
                   </Button>
                 </DropdownMenuTrigger>
                 {/* z-[68]: portals to body at z-50, beneath the floating
                     surfaces' [53,64] band. */}
-                <DropdownMenuContent align="end" className="z-[68]">
+                <DropdownMenuContent align="end" style={{ zIndex: 68 }}>
                   {noteColorSchema.options.map((color) => (
                     <DropdownMenuItem
                       key={color}
@@ -497,6 +508,11 @@ export function NotesWindow() {
             key={selected.id}
             note={selected}
             autoFocus={focusEditorId === selected.id}
+            className={
+              selected.color !== null
+                ? `bb-fn-tint-${selected.color} bb-fn-tinted-editor`
+                : undefined
+            }
           />
         )}
         <div className="flex shrink-0 items-center gap-2 border-t border-border px-2.5 py-1 text-[11px] text-muted-foreground">

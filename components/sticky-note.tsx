@@ -140,7 +140,7 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
           </DropdownMenuTrigger>
           {/* z-[68]: the vendored menu portals to body at z-50, underneath
               the floating surfaces' [53,64] band — it must clear them. */}
-          <DropdownMenuContent align="start" data-no-drag="" className="z-[68]">
+          <DropdownMenuContent align="start" data-no-drag="" style={{ zIndex: 68 }}>
             {noteColorSchema.options.map((color) => (
               <DropdownMenuItem
                 key={color}

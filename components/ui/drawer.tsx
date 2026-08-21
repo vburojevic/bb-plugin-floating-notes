@@ -40,16 +40,20 @@ const DrawerClose = DrawerPrimitive.Close;
 const DrawerOverlay = React.forwardRef<
   React.ComponentRef<typeof DrawerPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+>(({ className, style, ...props }, ref) => (
   <DrawerPrimitive.Overlay
     ref={ref}
     // Portaled outside every plugin mount; re-attach the plugin CSS scope
     // when rendered from a plugin slot (see portal-scope.ts).
     {...usePortalScopeProps()}
     className={cn(
-      "fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px]",
+      "fixed inset-0 bg-black/40 backdrop-blur-[1px]",
       className,
     )}
+    // Inline: arbitrary z utilities do not resolve at this portal boundary
+    // (bb wraps plugin utilities in @scope), and this must clear the
+    // floating sheet's [53,64] band while staying under bb dialogs (70).
+    style={{ zIndex: 66, ...style }}
     {...props}
   />
 ));
@@ -58,16 +62,17 @@ DrawerOverlay.displayName = DrawerPrimitive.Overlay.displayName;
 const DrawerContent = React.forwardRef<
   React.ComponentRef<typeof DrawerPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, style, ...props }, ref) => (
   <DrawerPortal>
     <DrawerOverlay />
     <DrawerPrimitive.Content
       ref={ref}
       {...usePortalScopeProps()}
       className={cn(
-        "fixed inset-x-0 bottom-0 z-50 mt-24 flex max-h-[85dvh] flex-col rounded-t-xl border bg-background",
+        "fixed inset-x-0 bottom-0 mt-24 flex max-h-[85dvh] flex-col rounded-t-xl border bg-background",
         className,
       )}
+      style={{ zIndex: 67, ...style }}
       {...props}
     >
       <DrawerPrimitive.Handle

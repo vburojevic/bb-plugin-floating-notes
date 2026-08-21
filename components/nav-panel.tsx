@@ -238,7 +238,15 @@ export function NotesNavPanel() {
               {selected.body}
             </div>
           ) : (
-            <NoteEditor key={selected.id} note={selected} />
+            <NoteEditor
+              key={selected.id}
+              note={selected}
+              className={
+                selected.color !== null
+                  ? `bb-fn-tint-${selected.color} bb-fn-tinted-editor`
+                  : undefined
+              }
+            />
           )}
         </div>
       )}

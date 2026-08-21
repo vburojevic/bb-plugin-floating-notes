@@ -124,6 +124,16 @@
   background: transparent;
 }
 
+/* The window/sheet editor wears the note's color too — on mobile there is
+   no sticky to tint, so this is the visible meaning of the color picker. */
+.bb-fn-tinted-editor {
+  background: var(--bb-fn-tint, transparent);
+}
+
+.bb-fn-tinted-editor .cm-editor {
+  background: transparent;
+}
+
 /* ---------------------------------------------------------- quick capture */
 
 .bb-fn-capture-backdrop {
