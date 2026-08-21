@@ -13,6 +13,7 @@ import { definePluginApp } from "@bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport";
 import { FloatingNotes } from "@/components/floating-notes";
 import { NotesNavPanel } from "@/components/nav-panel";
 import { ThreadNotesPanel } from "@/components/thread-panel";
@@ -38,6 +39,10 @@ function ThreadHeaderNotesButton({
     [threadId, projectId],
   );
 
+  // Stickies never render on compact viewports; there the button opens the
+  // scratchpad in the sheet window instead of flipping invisible flags.
+  const compact = useIsCompactViewport();
+
   return (
     <Button
       variant="ghost"
@@ -47,6 +52,10 @@ function ThreadHeaderNotesButton({
       onClick={async () => {
         try {
           const pad = await notesStore.scratchpad(threadId, projectId);
+          if (compact) {
+            controller.showWindow(pad.id);
+            return;
+          }
           // A toggle with feedback: clicking must always visibly do something.
           if (pad.stickyOpen && pad.pinnedThreadId === threadId) {
             await notesStore.updateNote({ id: pad.id, stickyOpen: false });

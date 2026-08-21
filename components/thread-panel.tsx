@@ -1,6 +1,7 @@
 // The thread's side-panel tab: the scratchpad on top, then every note that
 // was captured from this thread.
 import { useEffect, useMemo, useState } from "react";
+import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -16,6 +17,7 @@ import type { ListedNote } from "@/lib/contract";
 export function ThreadNotesPanel({ threadId }: { threadId: string }) {
   const { notes } = useNotesState();
   const [scratchpadId, setScratchpadId] = useState<string | null>(null);
+  const compact = useIsCompactViewport();
 
   useEffect(() => {
     void notesStore.refresh();
@@ -52,8 +54,13 @@ export function ThreadNotesPanel({ threadId }: { threadId: string }) {
                 variant="ghost"
                 size="icon"
                 className="size-6"
-                aria-label="Float over this thread"
+                aria-label={compact ? "Open in notes" : "Float over this thread"}
                 onClick={() => {
+                  // No stickies on compact viewports — open the sheet instead.
+                  if (compact) {
+                    controller.showWindow(scratchpad.id);
+                    return;
+                  }
                   void notesStore.updateNote({
                     id: scratchpad.id,
                     stickyOpen: true,

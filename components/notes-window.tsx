@@ -253,10 +253,10 @@ export function NotesWindow() {
   }, [selected]);
 
   const popOutSelected = useCallback(() => {
-    if (selected === null) return;
+    if (selected === null || sheet) return;
     void notesStore.updateNote({ id: selected.id, stickyOpen: true });
     toast.success("Popped out as a sticky");
-  }, [selected]);
+  }, [selected, sheet]);
 
   const newSticky = useCallback(async () => {
     // Stickies never render on the compact sheet; a sticky created there
@@ -333,8 +333,15 @@ export function NotesWindow() {
       },
     ];
     if (selected !== null && view === "active") {
+      if (!sheet) {
+        actions.push({
+          id: "popout",
+          label: `Pop out “${selected.title}”`,
+          icon: "ArrowUpRight",
+          run: popOutSelected,
+        });
+      }
       actions.push(
-        { id: "popout", label: `Pop out “${selected.title}”`, icon: "ArrowUpRight", run: popOutSelected },
         { id: "copy", label: "Copy note as Markdown", icon: "Copy", run: copySelected },
         {
           id: "pin",
@@ -346,7 +353,7 @@ export function NotesWindow() {
       );
     }
     return actions;
-  }, [newNote, newSticky, openDaily, openInbox, view, selected, popOutSelected, copySelected, trashSelected]);
+  }, [newNote, newSticky, openDaily, openInbox, view, selected, sheet, popOutSelected, copySelected, trashSelected]);
 
   // --------------------------------------------------------------- render
 
@@ -449,15 +456,17 @@ export function NotesWindow() {
                   aria-label={selected.pinned ? "Unpin" : "Pin"}
                 />
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-6"
-                aria-label="Pop out as sticky"
-                onClick={popOutSelected}
-              >
-                <Icon name="ArrowUpRight" className="size-3.5" aria-label="Pop out" />
-              </Button>
+              {!sheet ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  aria-label="Pop out as sticky"
+                  onClick={popOutSelected}
+                >
+                  <Icon name="ArrowUpRight" className="size-3.5" aria-label="Pop out" />
+                </Button>
+              ) : null}
               <Button
                 variant="ghost"
                 size="icon"
