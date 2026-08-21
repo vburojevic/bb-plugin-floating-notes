@@ -27,6 +27,12 @@ export interface ControllerState {
   notePickerTarget: ComposerInsertTarget | null;
   /** Most recently seen first. */
   visibleThreads: readonly VisibleThread[];
+  /**
+   * A thread the user asked to jump to. The content script cannot call
+   * useBbNavigate, so it posts the request here and any mounted bb-tree
+   * bridge (thread header, panels) executes and consumes it.
+   */
+  navigateRequest: { threadId: string; seq: number } | null;
 }
 
 type Listener = () => void;
@@ -37,7 +43,10 @@ let state: ControllerState = {
   focusNoteId: null,
   notePickerTarget: null,
   visibleThreads: [],
+  navigateRequest: null,
 };
+
+let navigateSeq = 0;
 
 const listeners = new Set<Listener>();
 
@@ -102,5 +111,18 @@ export const controller = {
   },
   isThreadVisible(threadId: string): boolean {
     return state.visibleThreads.some((thread) => thread.threadId === threadId);
+  },
+
+  // --------------------------------------------------------- navigation
+  /** Jump to a thread from anywhere; hard-navigates when no bridge exists. */
+  openThread(threadId: string): void {
+    if (state.visibleThreads.length > 0) {
+      setState({ navigateRequest: { threadId, seq: ++navigateSeq } });
+      return;
+    }
+    window.location.assign(`/threads/${encodeURIComponent(threadId)}`);
+  },
+  consumeNavigation(seq: number): void {
+    if (state.navigateRequest?.seq === seq) setState({ navigateRequest: null });
   },
 };

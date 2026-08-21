@@ -9,6 +9,9 @@ import {
   type MarkdownEditorHandle,
 } from "@/lib/editor";
 import { notesStore, rpc } from "@/lib/store";
+import { controller } from "@/lib/controller";
+import { useNotesState } from "@/lib/hooks";
+import { displayTitle } from "@/components/note-list";
 import type { ListedNote } from "@/lib/contract";
 import { confettiBurst } from "@/components/confetti";
 import { cn } from "@/lib/utils";
@@ -38,6 +41,28 @@ export function NoteEditor({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const handleRef = useRef<MarkdownEditorHandle | null>(null);
+  const { notes: allNotes } = useNotesState();
+
+  // [[Wiki links]]: completions from every active note's display title, and
+  // resolution by title — a missing target becomes a new note.
+  const wikiCompletions = useMemo(
+    () => allNotes.map((other) => displayTitle(other)),
+    [allNotes],
+  );
+  const onOpenWikiLink = useCallback((target: string) => {
+    const needle = target.trim().toLowerCase();
+    const match = notesStore
+      .get()
+      .notes.find((other) => displayTitle(other).toLowerCase() === needle);
+    if (match !== undefined) {
+      controller.showWindow(match.id);
+      return;
+    }
+    void notesStore.createNote({ body: `# ${target.trim()}\n\n` }).then((created) => {
+      controller.showWindow(created.id);
+      toast.success(`Created “${target.trim()}”`);
+    });
+  }, []);
   const tasksRef = useRef({ done: note.taskDone, total: note.taskTotal });
   /** Bumped to remount the editor on an externally written body. */
   const [externalVersion, setExternalVersion] = useState(0);
@@ -123,6 +148,8 @@ export function NoteEditor({
         onPasteImage={onPasteImage}
         resolveAttachment={resolveAttachment}
         onOpenLink={onOpenLink}
+        wikiCompletions={wikiCompletions}
+        onOpenWikiLink={onOpenWikiLink}
         placeholder={placeholder ?? "Write…"}
         autoFocus={autoFocus}
         className="size-full"
@@ -132,7 +159,7 @@ export function NoteEditor({
     // after mount, and our own saves echoing back in would move the caret.
     // externalVersion is how a genuinely external body gets in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [note.id, externalVersion, onSave, onChange, onPasteImage, resolveAttachment, onOpenLink],
+    [note.id, externalVersion, onSave, onChange, onPasteImage, resolveAttachment, onOpenLink, wikiCompletions, onOpenWikiLink],
   );
 
   return (

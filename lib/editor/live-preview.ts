@@ -13,7 +13,7 @@
  * prefixed `bbnotes-`.
  */
 import { syntaxTree } from "@codemirror/language";
-import { Facet, type Extension, type Range } from "@codemirror/state";
+import { Facet, type Extension, type Range, type Text } from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
@@ -23,6 +23,7 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import type { SyntaxNode, SyntaxNodeRef } from "@lezer/common";
+import { isTableDelimiterLine } from "./markdown-utils";
 import { findTaskBoxInLine } from "./tasks";
 
 export interface LivePreviewConfig {
@@ -159,6 +160,20 @@ class ImageWidget extends WidgetType {
 
 /* --- Decoration building --------------------------------------------------- */
 
+/**
+ * `[[Target]]` wiki links (owned by `wiki-links.ts`) confuse the markdown
+ * parser: it sees the inner `[Target]` as a shortcut-reference Link. Detect
+ * that shape — a URL-less Link directly wrapped in one more bracket pair —
+ * so both decoration and ⌘-click link resolution can leave it alone.
+ */
+function isWikiWrappedLink(doc: Text, node: SyntaxNode): boolean {
+  if (node.getChild("URL")) return false;
+  return (
+    doc.sliceString(Math.max(0, node.from - 1), node.from) === "[" &&
+    doc.sliceString(node.to, Math.min(doc.length, node.to + 1)) === "]"
+  );
+}
+
 const HEADING_LINE_CLASS: Record<string, string> = {
   ATXHeading1: "bbnotes-h1",
   ATXHeading2: "bbnotes-h2",
@@ -272,6 +287,16 @@ function buildDecorations(view: EditorView, images: ImageCache): DecorationSet {
         });
         return;
 
+      case "Table":
+        // Legible, not gridded: mono line class keeps pipes aligned; the
+        // `|---|` delimiter row is dimmed. True grid rendering is out of scope.
+        addLineClassRange(node.from, node.to, visibleFrom, visibleTo, (n) => {
+          const classes = ["bbnotes-table-row"];
+          if (isTableDelimiterLine(doc.line(n).text)) classes.push("bbnotes-table-delimiter");
+          return classes;
+        });
+        return;
+
       case "Blockquote":
         addLineClassRange(node.from, node.to, visibleFrom, visibleTo, () => ["bbnotes-quote"]);
         return;
@@ -312,6 +337,9 @@ function buildDecorations(view: EditorView, images: ImageCache): DecorationSet {
 
       case "Link":
       case "Autolink":
+        // Wiki-link shape: skip node AND children (no link mark, no
+        // LinkMark hiding) — wiki-links.ts renders the pill.
+        if (name === "Link" && isWikiWrappedLink(doc, node.node)) return false;
         mark(node.from, node.to, "bbnotes-link");
         return;
       case "LinkMark":
@@ -396,6 +424,7 @@ function cleanHref(raw: string): string {
 function linkHrefAt(view: EditorView, pos: number): string | null {
   let node: SyntaxNode | null = syntaxTree(view.state).resolveInner(pos, 0);
   for (; node; node = node.parent) {
+    if (node.name === "Link" && isWikiWrappedLink(view.state.doc, node)) continue;
     if (node.name === "Link" || node.name === "Image" || node.name === "Autolink") {
       const url = node.getChild("URL");
       const raw = url

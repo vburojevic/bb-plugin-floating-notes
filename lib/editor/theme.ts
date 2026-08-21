@@ -1,4 +1,6 @@
+import { HighlightStyle } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
+import { tags as t } from "@lezer/highlight";
 
 /**
  * Editor chrome theme built entirely from bb design tokens (CSS custom
@@ -47,3 +49,25 @@ export const bbnotesTheme = EditorView.theme({
     color: "var(--muted-foreground)",
   },
 });
+
+/**
+ * Syntax colors for fenced-code languages, entirely from bb tokens: the
+ * `--ansi-0…15` palette bb publishes for terminals (and re-tunes per theme;
+ * `--ansi-1` red … `--ansi-6` cyan, `+8` for bright) plus `--muted-foreground`
+ * for comments/meta. Apply with `syntaxHighlighting(bbnotesHighlightStyle)`.
+ *
+ * Deliberately does NOT touch markdown's own tags (heading, emphasis, link,
+ * processingInstruction) — the live preview owns prose styling.
+ */
+export const bbnotesHighlightStyle = HighlightStyle.define([
+  { tag: [t.keyword, t.modifier, t.operatorKeyword], color: "var(--ansi-5)" },
+  { tag: [t.string, t.special(t.string), t.regexp], color: "var(--ansi-2)" },
+  { tag: t.comment, color: "var(--muted-foreground)", fontStyle: "italic" },
+  { tag: [t.number, t.bool, t.null, t.atom], color: "var(--ansi-3)" },
+  { tag: [t.typeName, t.className, t.namespace], color: "var(--ansi-11)" },
+  { tag: [t.propertyName, t.attributeName, t.labelName], color: "var(--ansi-1)" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName), t.macroName], color: "var(--ansi-4)" },
+  { tag: t.operator, color: "var(--ansi-6)" },
+  { tag: t.meta, color: "var(--muted-foreground)" },
+  { tag: t.invalid, color: "var(--ansi-9)" },
+]);

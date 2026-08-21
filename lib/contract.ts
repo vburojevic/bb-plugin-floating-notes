@@ -30,6 +30,8 @@ export const noteSchema = z.object({
   pinned: z.boolean(),
   /** Sticky visible only while this thread is on screen; null = everywhere. */
   pinnedThreadId: z.string().nullable(),
+  /** Sticky visible on any thread of this project; null = not project-pinned. */
+  pinnedProjectId: z.string().nullable(),
   stickyOpen: z.boolean(),
   collapsed: z.boolean(),
   /** Daily notes only: the YYYY-MM-DD the note is for. */
@@ -114,6 +116,7 @@ export const rpcContract = {
         stickyOpen: z.boolean().optional(),
         collapsed: z.boolean().optional(),
         pinnedThreadId: z.string().nullable().optional(),
+        pinnedProjectId: z.string().nullable().optional(),
       })
       .strict(),
     output: z.object({ note: noteSchema }),
@@ -175,6 +178,55 @@ export const rpcContract = {
         .object({ mime: z.string(), dataBase64: z.string() })
         .nullable(),
     }),
+  },
+  /** Autosave history: one revision of the pre-edit body every few minutes. */
+  listRevisions: {
+    input: z.object({ noteId: z.string() }).strict(),
+    output: z.object({
+      revisions: z.array(
+        z.object({
+          id: z.string(),
+          createdAt: z.number(),
+          chars: z.number().int(),
+        }),
+      ),
+    }),
+  },
+  getRevision: {
+    input: z.object({ id: z.string() }).strict(),
+    output: z.object({
+      revision: z
+        .object({
+          id: z.string(),
+          noteId: z.string(),
+          body: z.string(),
+          createdAt: z.number(),
+        })
+        .nullable(),
+    }),
+  },
+  /** Sets the note body to the revision (saving the current body first). */
+  restoreRevision: {
+    input: z.object({ id: z.string() }).strict(),
+    output: z.object({ note: noteSchema }),
+  },
+  listAttachments: {
+    input: z.object({ noteId: z.string() }).strict(),
+    output: z.object({
+      attachments: z.array(
+        z.object({
+          id: z.string(),
+          mime: z.string(),
+          bytes: z.number().int(),
+          createdAt: z.number(),
+        }),
+      ),
+    }),
+  },
+  /** Removes the BLOB and strips its bbnote:// refs from the note body. */
+  deleteAttachment: {
+    input: z.object({ id: z.string() }).strict(),
+    output: z.object({ note: noteSchema.nullable() }),
   },
   /** Resolved plugin settings the app needs (shortcuts, font, capture). */
   clientConfig: {

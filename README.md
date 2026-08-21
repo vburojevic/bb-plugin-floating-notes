@@ -28,10 +28,25 @@ with `Ctrl+Shift+'`.
   real tag — filterable chips in every list, no tag UI to visit. Markdown
   headings and `#123` refs are left alone. Trash empties itself after 30
   days.
-- **Live markdown.** Obsidian-style: syntax shows only on the active line,
-  checkboxes are clickable, headings size themselves, links `⌘`-click, pasted
-  images upload into the note and render inline. Checklists get a progress
-  ring — and a small confetti burst when the last box is ticked.
+- **Live markdown, properly.** Obsidian-style: syntax shows only on the
+  active line, checkboxes are clickable, headings size themselves, pasted
+  images upload into the note and render inline, code fences get real
+  syntax highlighting from bb's palette, GFM tables render legibly, and
+  `[[wiki links]]` autocomplete across your notes — clicking a link to a
+  note that doesn't exist creates it. `⌘B/I`, `⌘⇧X` strikethrough, `⌘⇧K`
+  link, and pasting a URL over selected text links it. Checklists get a
+  progress ring — and a confetti burst when the last box is ticked.
+- **History and hygiene.** Every meaningful edit keeps a revision (restore
+  from the editor footer), deleted image refs are garbage-collected, tags
+  are managed from the footer chips, and today's daily note carries over
+  yesterday's unfinished tasks.
+- **Search operators.** `tag:api in:scratchpads is:open thread:current`
+  compose with full-text search in every search box.
+- **Pins and postures.** Stickies pin to a thread or a whole project, snap
+  to screen edges, and have a reference mode — translucent and read-only
+  until hovered. Changes from agents or the CLI appear instantly
+  (realtime), and `bb notes export/import <dir>` round-trips your notes as
+  markdown files with front-matter.
 - **Chat both ways.** "Save as note" / "Add to scratchpad" on every message
   (and on selected text); "Insert note" in the composer's `+` menu pastes a
   note into the draft; `@note` mentions resolve fresh at send time.

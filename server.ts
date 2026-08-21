@@ -4,6 +4,8 @@
 // lib/contract.ts; every mutation runs through a serialize mutex and publishes
 // a realtime "changed" signal after commit.
 import { randomUUID } from "node:crypto";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { isAbsolute, join, resolve } from "node:path";
 import { type BbPluginApi } from "@bb/plugin-sdk";
 import { z } from "zod";
 import {
@@ -24,7 +26,11 @@ import {
   ftsQuery,
   localDateKey,
   normalizeTags,
+  referencedAttachmentIds,
+  slug,
   snippetFromBody,
+  stripAttachmentRefs,
+  uncheckedTaskLines,
 } from "./lib/notes";
 
 const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
@@ -33,6 +39,13 @@ const TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
 /** kv flag guarding the one-time FTS index rebuild. */
 const FTS_REBUILT_KEY = "fts-rebuilt-v2";
+/** A body edit only snapshots a revision when the newest one is older than this. */
+const REVISION_MIN_INTERVAL_MS = 4 * 60 * 1000;
+/** Newest revisions kept per note; older ones are pruned after each insert. */
+const REVISION_KEEP = 20;
+/** Unreferenced attachments younger than this survive GC — a just-uploaded
+ * image must not be collected before its ref lands via the debounced save. */
+const ATTACHMENT_GC_GRACE_MS = 10 * 60 * 1000;
 
 interface NoteRow {
   id: string;
@@ -43,6 +56,7 @@ interface NoteRow {
   color: string | null;
   pinned: number;
   pinned_thread_id: string | null;
+  pinned_project_id: string | null;
   sticky_open: number;
   collapsed: number;
   date_key: string | null;
@@ -53,6 +67,13 @@ interface NoteRow {
   origin_thread_id: string | null;
   created_at: number;
   updated_at: number;
+}
+
+interface RevisionRow {
+  id: string;
+  note_id: string;
+  body: string;
+  created_at: number;
 }
 
 const NOTE_KINDS: readonly string[] = noteKindSchema.options;
@@ -78,6 +99,7 @@ function rowToNote(row: NoteRow): Note {
         : null,
     pinned: row.pinned === 1,
     pinnedThreadId: row.pinned_thread_id,
+    pinnedProjectId: row.pinned_project_id,
     stickyOpen: row.sticky_open === 1,
     collapsed: row.collapsed === 1,
     dateKey: row.date_key,
@@ -179,6 +201,16 @@ export default async function plugin(bb: BbPluginApi) {
       created_at INTEGER NOT NULL
     )`,
     `CREATE INDEX IF NOT EXISTS idx_attachments_note ON attachments (note_id)`,
+    // 11+: project pins and autosave revision history. Append-only — never
+    // reorder or edit the statements above.
+    `ALTER TABLE notes ADD COLUMN pinned_project_id TEXT`,
+    `CREATE TABLE IF NOT EXISTS note_revisions (
+      id TEXT PRIMARY KEY,
+      note_id TEXT NOT NULL,
+      body TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_note_revisions_note ON note_revisions (note_id, created_at DESC)`,
   ]);
 
   // ---- FTS5, outside the migrate list so a missing module can't brick the
@@ -215,11 +247,14 @@ export default async function plugin(bb: BbPluginApi) {
   settings.onChange(() => notifyChanged());
 
   // Trash is a grace period, not an archive: purge anything trashed over 30
-  // days ago (attachments first — no FK cascade in this schema).
+  // days ago (attachments and revisions first — no FK cascade in this schema).
   {
     const cutoff = Date.now() - TRASH_RETENTION_MS;
     db.prepare(
       `DELETE FROM attachments WHERE note_id IN (SELECT id FROM notes WHERE trashed_at IS NOT NULL AND trashed_at < ?)`,
+    ).run(cutoff);
+    db.prepare(
+      `DELETE FROM note_revisions WHERE note_id IN (SELECT id FROM notes WHERE trashed_at IS NOT NULL AND trashed_at < ?)`,
     ).run(cutoff);
     const purged = db
       .prepare(`DELETE FROM notes WHERE trashed_at IS NOT NULL AND trashed_at < ?`)
@@ -448,6 +483,59 @@ export default async function plugin(bb: BbPluginApi) {
     return { mime: row.mime, dataBase64: Buffer.from(row.bytes).toString("base64") };
   };
 
+  /** Revision metadata, newest first. chars mirrors JS body.length. */
+  const listRevisions = (
+    noteId: string,
+  ): Array<{ id: string; createdAt: number; chars: number }> =>
+    (
+      db
+        .prepare(
+          "SELECT id, body, created_at FROM note_revisions WHERE note_id = ? ORDER BY created_at DESC",
+        )
+        .all(noteId) as Array<{ id: string; body: string; created_at: number }>
+    ).map((row) => ({
+      id: row.id,
+      createdAt: row.created_at,
+      chars: row.body.length,
+    }));
+
+  const getRevision = (
+    id: string,
+  ): { id: string; noteId: string; body: string; createdAt: number } | null => {
+    const row = db.prepare("SELECT * FROM note_revisions WHERE id = ?").get(id) as
+      | RevisionRow
+      | undefined;
+    if (row === undefined) return null;
+    return {
+      id: row.id,
+      noteId: row.note_id,
+      body: row.body,
+      createdAt: row.created_at,
+    };
+  };
+
+  /** Attachment metadata, newest first — sizes via length(bytes), no blobs. */
+  const listAttachments = (
+    noteId: string,
+  ): Array<{ id: string; mime: string; bytes: number; createdAt: number }> =>
+    (
+      db
+        .prepare(
+          "SELECT id, mime, length(bytes) AS bytes, created_at FROM attachments WHERE note_id = ? ORDER BY created_at DESC",
+        )
+        .all(noteId) as Array<{
+        id: string;
+        mime: string;
+        bytes: number;
+        created_at: number;
+      }>
+    ).map((row) => ({
+      id: row.id,
+      mime: row.mime,
+      bytes: row.bytes,
+      createdAt: row.created_at,
+    }));
+
   // ---- raw mutations (call only through `api`, which serializes) -----------
 
   interface CreateInput {
@@ -502,6 +590,58 @@ export default async function plugin(bb: BbPluginApi) {
     return getById(id)!;
   };
 
+  /**
+   * Snapshot `previousBody` into note_revisions ahead of a body write.
+   * Skipped when the newest revision for the note is younger than 4 minutes
+   * (autosave churn would flood the table) unless `force` — restoreRevision
+   * must never lose the present state. Empty previous bodies are never worth
+   * a revision; every insert prunes the note down to the newest 20.
+   */
+  const snapshotRevisionRaw = (
+    noteId: string,
+    previousBody: string,
+    force = false,
+  ): void => {
+    if (previousBody.length === 0) return;
+    const now = Date.now();
+    if (!force) {
+      const newest = db
+        .prepare(
+          "SELECT created_at FROM note_revisions WHERE note_id = ? ORDER BY created_at DESC LIMIT 1",
+        )
+        .get(noteId) as { created_at: number } | undefined;
+      if (newest !== undefined && now - newest.created_at < REVISION_MIN_INTERVAL_MS) {
+        return;
+      }
+    }
+    db.prepare(
+      "INSERT INTO note_revisions (id, note_id, body, created_at) VALUES (?, ?, ?, ?)",
+    ).run(newId(), noteId, previousBody, now);
+    db.prepare(
+      `DELETE FROM note_revisions WHERE note_id = ? AND id NOT IN (
+         SELECT id FROM note_revisions WHERE note_id = ? ORDER BY created_at DESC LIMIT ?
+       )`,
+    ).run(noteId, noteId, REVISION_KEEP);
+  };
+
+  /**
+   * After a body write, drop this note's attachments the new body no longer
+   * references — except those younger than the 10-minute grace period, so a
+   * just-uploaded image isn't collected before its ref lands via the
+   * debounced save.
+   */
+  const gcAttachmentsRaw = (noteId: string, body: string): void => {
+    const referenced = new Set(referencedAttachmentIds(body));
+    const candidates = db
+      .prepare("SELECT id FROM attachments WHERE note_id = ? AND created_at < ?")
+      .all(noteId, Date.now() - ATTACHMENT_GC_GRACE_MS) as Array<{ id: string }>;
+    for (const row of candidates) {
+      if (!referenced.has(row.id)) {
+        db.prepare("DELETE FROM attachments WHERE id = ?").run(row.id);
+      }
+    }
+  };
+
   interface UpdateInput {
     id: string;
     body?: string;
@@ -511,12 +651,17 @@ export default async function plugin(bb: BbPluginApi) {
     stickyOpen?: boolean;
     collapsed?: boolean;
     pinnedThreadId?: string | null;
+    pinnedProjectId?: string | null;
   }
 
-  /** Omitted field = untouched; explicit null clears (color, pinnedThreadId). */
+  /** Omitted field = untouched; explicit null clears (color, pinnedThreadId,
+   * pinnedProjectId). Thread and project pins are independent — setting one
+   * never clears the other; which stickies show where is the client's call. */
   const updateNoteRaw = (input: UpdateInput): Note => {
     const note = resolveId(input.id);
     const body = input.body ?? note.body;
+    const bodyChanged = body !== note.body;
+    if (bodyChanged) snapshotRevisionRaw(note.id, note.body);
     // Inline #hashtags union into the stored tags; explicit removals happen
     // through the tags input (CLI/tools), body edits only ever add.
     const tags = normalizeTags([
@@ -524,10 +669,10 @@ export default async function plugin(bb: BbPluginApi) {
       ...extractHashtags(body),
     ]);
     const contentChanged =
-      body !== note.body || JSON.stringify(tags) !== JSON.stringify(note.tags);
+      bodyChanged || JSON.stringify(tags) !== JSON.stringify(note.tags);
     const { total, done } = countTasks(body);
     db.prepare(
-      `UPDATE notes SET body = ?, title = ?, tags = ?, task_total = ?, task_done = ?, pinned = ?, color = ?, sticky_open = ?, collapsed = ?, pinned_thread_id = ?, updated_at = ? WHERE id = ?`,
+      `UPDATE notes SET body = ?, title = ?, tags = ?, task_total = ?, task_done = ?, pinned = ?, color = ?, sticky_open = ?, collapsed = ?, pinned_thread_id = ?, pinned_project_id = ?, updated_at = ? WHERE id = ?`,
     ).run(
       body,
       deriveTitle(body),
@@ -539,11 +684,13 @@ export default async function plugin(bb: BbPluginApi) {
       (input.stickyOpen ?? note.stickyOpen) ? 1 : 0,
       (input.collapsed ?? note.collapsed) ? 1 : 0,
       input.pinnedThreadId !== undefined ? input.pinnedThreadId : note.pinnedThreadId,
+      input.pinnedProjectId !== undefined ? input.pinnedProjectId : note.pinnedProjectId,
       // Metadata-only writes (pin, color, sticky, collapse) keep updated_at so
       // toggles never reorder the recency-sorted list.
       contentChanged ? Date.now() : note.updatedAt,
       note.id,
     );
+    if (bodyChanged) gcAttachmentsRaw(note.id, body);
     notifyChanged();
     return getById(note.id)!;
   };
@@ -552,11 +699,14 @@ export default async function plugin(bb: BbPluginApi) {
   const appendRaw = (idOrPrefix: string, text: string): Note => {
     const note = resolveId(idOrPrefix);
     const body = appendToBody(note.body, text);
+    const bodyChanged = body !== note.body;
+    if (bodyChanged) snapshotRevisionRaw(note.id, note.body);
     const { total, done } = countTasks(body);
     const tags = normalizeTags([...note.tags, ...extractHashtags(body)]);
     db.prepare(
       "UPDATE notes SET body = ?, title = ?, tags = ?, task_total = ?, task_done = ?, updated_at = ? WHERE id = ?",
     ).run(body, deriveTitle(body), JSON.stringify(tags), total, done, Date.now(), note.id);
+    if (bodyChanged) gcAttachmentsRaw(note.id, body);
     notifyChanged();
     return getById(note.id)!;
   };
@@ -603,9 +753,29 @@ export default async function plugin(bb: BbPluginApi) {
 
   const dailyRaw = (): Promise<{ note: Note; created: boolean }> => {
     const key = localDateKey(new Date());
+    // Carry-over is decided before the get-or-create: only a genuinely new
+    // daily note seeds its body with the previous daily's unfinished tasks.
+    // Any row for today — even a trashed one getOrCreateRaw will restore —
+    // means no carry-over.
+    let body = `# ${key}\n\n`;
+    const existing = db
+      .prepare("SELECT id FROM notes WHERE kind = 'daily' AND date_key = ?")
+      .get(key) as { id: string } | undefined;
+    if (existing === undefined) {
+      const previous = db
+        .prepare(
+          "SELECT body FROM notes WHERE kind = 'daily' AND trashed_at IS NULL AND date_key IS NOT NULL AND date_key != ? ORDER BY date_key DESC LIMIT 1",
+        )
+        .get(key) as { body: string } | undefined;
+      const carried =
+        previous !== undefined ? uncheckedTaskLines(previous.body) : [];
+      if (carried.length > 0) {
+        body = `# ${key}\n\n## Carried over\n${carried.join("\n")}\n\n`;
+      }
+    }
     return getOrCreateRaw(
       { clause: "kind = 'daily' AND date_key = ?", params: [key] },
-      { body: `# ${key}\n\n`, kind: "daily", dateKey: key },
+      { body, kind: "daily", dateKey: key },
     );
   };
 
@@ -620,7 +790,7 @@ export default async function plugin(bb: BbPluginApi) {
     if (trashed) {
       // Trash clears everything that would keep the note on screen.
       db.prepare(
-        "UPDATE notes SET trashed_at = ?, pinned = 0, sticky_open = 0, pinned_thread_id = NULL WHERE id = ?",
+        "UPDATE notes SET trashed_at = ?, pinned = 0, sticky_open = 0, pinned_thread_id = NULL, pinned_project_id = NULL WHERE id = ?",
       ).run(Date.now(), note.id);
     } else {
       db.prepare("UPDATE notes SET trashed_at = NULL WHERE id = ?").run(note.id);
@@ -636,6 +806,7 @@ export default async function plugin(bb: BbPluginApi) {
     }
     db.transaction((noteId: string) => {
       db.prepare("DELETE FROM attachments WHERE note_id = ?").run(noteId);
+      db.prepare("DELETE FROM note_revisions WHERE note_id = ?").run(noteId);
       db.prepare("DELETE FROM notes WHERE id = ?").run(noteId);
     })(note.id);
     notifyChanged();
@@ -646,6 +817,9 @@ export default async function plugin(bb: BbPluginApi) {
     const purged = db.transaction((): number => {
       db.prepare(
         "DELETE FROM attachments WHERE note_id IN (SELECT id FROM notes WHERE trashed_at IS NOT NULL)",
+      ).run();
+      db.prepare(
+        "DELETE FROM note_revisions WHERE note_id IN (SELECT id FROM notes WHERE trashed_at IS NOT NULL)",
       ).run();
       return db.prepare("DELETE FROM notes WHERE trashed_at IS NOT NULL").run()
         .changes;
@@ -684,6 +858,63 @@ export default async function plugin(bb: BbPluginApi) {
     return id;
   };
 
+  /**
+   * Set a note's body to a stored revision — after snapshotting the CURRENT
+   * body unconditionally (restoring must never lose the present state), and
+   * recomputing title/tags-union/task stats exactly like any body write.
+   */
+  const restoreRevisionRaw = (revisionId: string): Note => {
+    const revision = db
+      .prepare("SELECT * FROM note_revisions WHERE id = ?")
+      .get(revisionId) as RevisionRow | undefined;
+    if (revision === undefined) {
+      throw new Error(`No revision matching "${revisionId}"`);
+    }
+    const note = getById(revision.note_id);
+    if (note === null) {
+      throw new Error(`Revision "${revisionId}" belongs to a deleted note`);
+    }
+    snapshotRevisionRaw(note.id, note.body, true);
+    const body = revision.body;
+    const { total, done } = countTasks(body);
+    const tags = normalizeTags([...note.tags, ...extractHashtags(body)]);
+    db.prepare(
+      "UPDATE notes SET body = ?, title = ?, tags = ?, task_total = ?, task_done = ?, updated_at = ? WHERE id = ?",
+    ).run(body, deriveTitle(body), JSON.stringify(tags), total, done, Date.now(), note.id);
+    gcAttachmentsRaw(note.id, body);
+    notifyChanged();
+    return getById(note.id)!;
+  };
+
+  /**
+   * Remove an attachment and strip its bbnote:// refs from the owning note's
+   * body (derived fields recomputed). Null when the attachment didn't exist
+   * (or its note is already gone).
+   */
+  const deleteAttachmentRaw = (id: string): Note | null => {
+    const row = db
+      .prepare("SELECT id, note_id FROM attachments WHERE id = ?")
+      .get(id) as { id: string; note_id: string } | undefined;
+    if (row === undefined) return null;
+    db.prepare("DELETE FROM attachments WHERE id = ?").run(id);
+    const note = getById(row.note_id);
+    if (note === null) {
+      // Orphaned blob (note purged out from under it): nothing to strip.
+      notifyChanged();
+      return null;
+    }
+    const body = stripAttachmentRefs(note.body, row.id);
+    if (body !== note.body) {
+      const { total, done } = countTasks(body);
+      const tags = normalizeTags([...note.tags, ...extractHashtags(body)]);
+      db.prepare(
+        "UPDATE notes SET body = ?, title = ?, tags = ?, task_total = ?, task_done = ?, updated_at = ? WHERE id = ?",
+      ).run(body, deriveTitle(body), JSON.stringify(tags), total, done, Date.now(), note.id);
+    }
+    notifyChanged();
+    return getById(note.id);
+  };
+
   // ---- serialized mutation api (RPC, CLI, and agent tools all use this) ----
 
   const api = {
@@ -705,6 +936,10 @@ export default async function plugin(bb: BbPluginApi) {
       mime: string;
       dataBase64: string;
     }) => serialize(async () => uploadAttachmentRaw(input)),
+    restoreRevision: (id: string) =>
+      serialize(async () => restoreRevisionRaw(id)),
+    deleteAttachment: (id: string) =>
+      serialize(async () => deleteAttachmentRaw(id)),
   };
 
   // ---- RPC -----------------------------------------------------------------
@@ -732,6 +967,15 @@ export default async function plugin(bb: BbPluginApi) {
       id: await api.uploadAttachment(input),
     }),
     getAttachment: ({ id }) => ({ attachment: getAttachment(id) }),
+    listRevisions: ({ noteId }) => ({ revisions: listRevisions(noteId) }),
+    getRevision: ({ id }) => ({ revision: getRevision(id) }),
+    restoreRevision: async ({ id }) => ({
+      note: await api.restoreRevision(id),
+    }),
+    listAttachments: ({ noteId }) => ({ attachments: listAttachments(noteId) }),
+    deleteAttachment: async ({ id }) => ({
+      note: await api.deleteAttachment(id),
+    }),
     clientConfig: async () => {
       const values = await settings.get();
       return {
@@ -809,6 +1053,88 @@ export default async function plugin(bb: BbPluginApi) {
     return `${meta}\n\n${note.body}`;
   };
 
+  // ---- export/import helpers ----
+
+  /** One exported note file: hand-rolled YAML front-matter, then the body. */
+  const exportMarkdown = (note: Note): string =>
+    [
+      "---",
+      `id: ${note.id}`,
+      `kind: ${note.kind}`,
+      `tags: ${JSON.stringify(note.tags)}`,
+      `color: ${note.color ?? "null"}`,
+      `pinned: ${note.pinned}`,
+      `dateKey: ${note.dateKey ?? "null"}`,
+      `originThreadId: ${note.originThreadId ?? "null"}`,
+      `createdAt: ${new Date(note.createdAt).toISOString()}`,
+      `updatedAt: ${new Date(note.updatedAt).toISOString()}`,
+      "---",
+      note.body,
+    ].join("\n");
+
+  const EXTENSION_BY_MIME: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "image/svg+xml": "svg",
+    "image/avif": "avif",
+    "image/heic": "heic",
+    "image/bmp": "bmp",
+    "image/tiff": "tiff",
+  };
+
+  const extFromMime = (mime: string): string => {
+    const known = EXTENSION_BY_MIME[mime];
+    if (known !== undefined) return known;
+    const subtype = (mime.split("/")[1] ?? "")
+      .replace(/[^a-z0-9]/gi, "")
+      .toLowerCase();
+    return subtype.length > 0 ? subtype : "bin";
+  };
+
+  /**
+   * Hand-rolled front-matter split: a `---` fence on the first line, then
+   * `key: value` lines until the closing `---`. Returns null when a fence
+   * opens but never closes (malformed); a file with no fence is all body.
+   */
+  const splitFrontMatter = (
+    raw: string,
+  ): { meta: Record<string, string>; body: string } | null => {
+    const lines = raw.split("\n");
+    if (lines[0]?.trim() !== "---") return { meta: {}, body: raw };
+    const meta: Record<string, string> = {};
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i]!;
+      if (line.trim() === "---") {
+        return { meta, body: lines.slice(i + 1).join("\n") };
+      }
+      const colon = line.indexOf(":");
+      if (colon === -1) continue; // Tolerate stray lines between known keys.
+      meta[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+    }
+    return null;
+  };
+
+  /** Front-matter tags value: a JSON array or a comma list. */
+  const parseTagsValue = (value: string | undefined): string[] | undefined => {
+    if (value === undefined || value.length === 0) return undefined;
+    if (value.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((t): t is string => typeof t === "string");
+        }
+      } catch {
+        // Fall through to the comma list.
+      }
+    }
+    return value
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+  };
+
   const cliUsage = [
     "Usage: bb notes <command>",
     "  list [--tag t] [--trash] [--limit n]    List notes (pinned first)",
@@ -822,6 +1148,8 @@ export default async function plugin(bb: BbPluginApi) {
     "  empty-trash                             Purge everything in the trash",
     "  daily                                   Today's daily note (created on demand)",
     "  scratchpad [threadId]                   The thread's scratchpad note",
+    "  export <dir>                            Write notes as markdown files with front-matter",
+    "  import <dir>                            Create/update notes from markdown files",
   ].join("\n");
 
   bb.cli.register({
@@ -842,6 +1170,8 @@ export default async function plugin(bb: BbPluginApi) {
       { name: "empty-trash", summary: "Permanently delete everything in the trash", usage: "bb notes empty-trash" },
       { name: "daily", summary: "Print today's daily note (created on demand)", usage: "bb notes daily" },
       { name: "scratchpad", summary: "Print a thread's scratchpad note (created on demand)", usage: "bb notes scratchpad [threadId]" },
+      { name: "export", summary: "Write every non-trashed note (and attachments) to a directory as markdown", usage: "bb notes export <dir>" },
+      { name: "import", summary: "Create or update notes from a directory of markdown files", usage: "bb notes import <dir>" },
     ],
     async run(argv, ctx) {
       const [command, ...rest] = argv;
@@ -1002,6 +1332,115 @@ export default async function plugin(bb: BbPluginApi) {
             return {
               exitCode: 0,
               stdout: `${created ? "(created) " : ""}${showNote(note)}`,
+            };
+          }
+          case "export": {
+            const dirArg = rest[0];
+            if (!dirArg)
+              return { exitCode: 1, stderr: "Usage: bb notes export <dir>" };
+            const dir = isAbsolute(dirArg)
+              ? dirArg
+              : resolve(ctx.cwd ?? process.cwd(), dirArg);
+            const rows = db
+              .prepare(
+                "SELECT * FROM notes WHERE trashed_at IS NULL ORDER BY created_at ASC",
+              )
+              .all() as NoteRow[];
+            mkdirSync(dir, { recursive: true });
+            const attachmentsDir = join(dir, "_attachments");
+            let attachmentsDirMade = false;
+            let attachmentCount = 0;
+            for (const row of rows) {
+              const note = rowToNote(row);
+              writeFileSync(
+                join(dir, `${slug(note.title)}-${note.id.slice(0, 8)}.md`),
+                exportMarkdown(note),
+              );
+              const blobs = db
+                .prepare(
+                  "SELECT id, mime, bytes FROM attachments WHERE note_id = ?",
+                )
+                .all(note.id) as Array<{ id: string; mime: string; bytes: Buffer }>;
+              for (const blob of blobs) {
+                if (!attachmentsDirMade) {
+                  mkdirSync(attachmentsDir, { recursive: true });
+                  attachmentsDirMade = true;
+                }
+                writeFileSync(
+                  join(attachmentsDir, `${blob.id}.${extFromMime(blob.mime)}`),
+                  blob.bytes,
+                );
+                attachmentCount += 1;
+              }
+            }
+            return {
+              exitCode: 0,
+              stdout: `Exported ${rows.length} note${rows.length === 1 ? "" : "s"} and ${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"} to ${dir}`,
+            };
+          }
+          case "import": {
+            const dirArg = rest[0];
+            if (!dirArg)
+              return { exitCode: 1, stderr: "Usage: bb notes import <dir>" };
+            const dir = isAbsolute(dirArg)
+              ? dirArg
+              : resolve(ctx.cwd ?? process.cwd(), dirArg);
+            let names: string[];
+            try {
+              names = readdirSync(dir).filter((name) => name.endsWith(".md"));
+            } catch (error) {
+              return {
+                exitCode: 1,
+                stderr: `Cannot read ${dir}: ${error instanceof Error ? error.message : String(error)}`,
+              };
+            }
+            let createdCount = 0;
+            let updatedCount = 0;
+            const warnings: string[] = [];
+            for (const name of names.sort()) {
+              let raw: string;
+              try {
+                raw = readFileSync(join(dir, name), "utf8");
+              } catch {
+                warnings.push(`Skipped ${name}: unreadable`);
+                continue;
+              }
+              const parsed = splitFrontMatter(raw);
+              if (parsed === null) {
+                warnings.push(`Skipped ${name}: unterminated front-matter`);
+                continue;
+              }
+              const { meta, body } = parsed;
+              const tags = parseTagsValue(meta.tags);
+              // color: absent = untouched on update, unset on create;
+              // "null" clears; anything not in the palette is ignored.
+              const color: NoteColor | null | undefined =
+                meta.color === undefined
+                  ? undefined
+                  : meta.color === "null" || meta.color === ""
+                    ? null
+                    : NOTE_COLORS.includes(meta.color)
+                      ? (meta.color as NoteColor)
+                      : undefined;
+              const existing =
+                meta.id !== undefined && meta.id.length > 0
+                  ? getById(meta.id)
+                  : null;
+              if (existing !== null) {
+                await api.updateNote({ id: existing.id, body, tags, color });
+                updatedCount += 1;
+              } else {
+                // Unknown/missing id: create as a plain note — importing a
+                // second daily/inbox/scratchpad would trip the singleton
+                // indexes, so kind is not carried over.
+                await api.createNote({ body, tags, color });
+                createdCount += 1;
+              }
+            }
+            return {
+              exitCode: 0,
+              stdout: `Imported: ${createdCount} created, ${updatedCount} updated.`,
+              stderr: warnings.length > 0 ? warnings.join("\n") : undefined,
             };
           }
           default:

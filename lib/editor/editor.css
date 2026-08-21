@@ -71,6 +71,51 @@
   text-underline-offset: 2px;
 }
 
+/* --- Wiki links ------------------------------------------------------------ */
+
+.bbnotes-editor .bbnotes-wikilink {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  border-radius: 4px;
+  padding: 0.05em 0.2em;
+  cursor: pointer;
+}
+
+.bbnotes-editor .bbnotes-wikilink:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+/* --- Tables (GFM) ----------------------------------------------------------- */
+
+/* Legibility via monospace alignment, not grid rendering. */
+.bbnotes-editor .bbnotes-table-row {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.9em;
+  background: color-mix(in srgb, var(--muted-foreground) 6%, transparent);
+}
+
+.bbnotes-editor .bbnotes-table-delimiter {
+  color: var(--muted-foreground);
+  opacity: 0.7;
+}
+
+/* --- Autocomplete (wiki-link titles) --------------------------------------- */
+
+.bbnotes-editor .cm-tooltip.cm-tooltip-autocomplete {
+  background: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.bbnotes-editor .cm-tooltip-autocomplete ul li[aria-selected] {
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  color: var(--foreground);
+}
+
 /* --- Task lists ----------------------------------------------------------- */
 
 .bbnotes-editor .bbnotes-task-checkbox {

@@ -1,13 +1,17 @@
 // The nav panel: the full-page notes browser. Same list, same editor, same
 // vocabulary as the floating window — just given a whole route to breathe in.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRealtime } from "@bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { displayTitle, NoteList } from "@/components/note-list";
 import { NoteEditor } from "@/components/note-editor";
 import { useNotesState } from "@/lib/hooks";
+import { controller } from "@/lib/controller";
 import { notesStore, rpc } from "@/lib/store";
+import { parseSearchQuery } from "@/lib/notes";
+import { EditorFooter } from "@/components/editor-footer";
 import type { ListedNote } from "@/lib/contract";
 
 const SEARCH_DEBOUNCE_MS = 150;
@@ -26,6 +30,12 @@ export function NotesNavPanel() {
     void notesStore.refresh();
   }, []);
 
+  // Instant sync: agent tools, the CLI, and other windows publish "changed".
+  useRealtime(
+    "notes",
+    useCallback(() => void notesStore.refresh(), []),
+  );
+
   const searchTimer = useRef<number | null>(null);
   /** Monotonic token: a late response for an old query/view must not land. */
   const searchSeq = useRef(0);
@@ -37,10 +47,27 @@ export function NotesNavPanel() {
       return;
     }
     searchTimer.current = window.setTimeout(() => {
+      const parsed = parseSearchQuery(query);
+      const currentThread =
+        parsed.threadRef === "current" ? controller.activeThread() : null;
       void rpc
-        .call("listNotes", { query, view })
+        .call("listNotes", {
+          view: parsed.view ?? view,
+          ...(parsed.text.length > 0 ? { query: parsed.text } : {}),
+          ...(parsed.tag !== undefined ? { tag: parsed.tag } : {}),
+          ...(parsed.kinds !== undefined ? { kinds: parsed.kinds } : {}),
+          ...(parsed.stickyOpen === true ? { stickyOpen: true } : {}),
+          ...(currentThread !== null ? { threadId: currentThread.threadId } : {}),
+        })
         .then((result) => {
-          if (seq === searchSeq.current) setSearchResults(result.notes);
+          if (seq !== searchSeq.current) return;
+          let rows = result.notes;
+          if (parsed.task === "open") {
+            rows = rows.filter((n) => n.taskTotal > n.taskDone);
+          } else if (parsed.task === "done") {
+            rows = rows.filter((n) => n.taskTotal > 0 && n.taskDone === n.taskTotal);
+          }
+          setSearchResults(rows);
         })
         .catch(() => {
           if (seq === searchSeq.current) setSearchResults(null);
@@ -238,15 +265,27 @@ export function NotesNavPanel() {
               {selected.body}
             </div>
           ) : (
-            <NoteEditor
-              key={selected.id}
-              note={selected}
-              className={
-                selected.color !== null
-                  ? `bb-fn-tint-${selected.color} bb-fn-tinted-editor`
-                  : undefined
-              }
-            />
+            <>
+              <NoteEditor
+                key={selected.id}
+                note={selected}
+                className={
+                  selected.color !== null
+                    ? `bb-fn-tint-${selected.color} bb-fn-tinted-editor`
+                    : undefined
+                }
+              />
+              <EditorFooter
+                note={selected}
+                notes={notes}
+                onTagClick={(tag) => {
+                  setView("active");
+                  setQuery("");
+                  setActiveTag(tag);
+                }}
+                onOpenNote={setSelectedId}
+              />
+            </>
           )}
         </div>
       )}

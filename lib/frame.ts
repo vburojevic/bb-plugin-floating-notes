@@ -141,6 +141,24 @@ export function forgetFrame(key: string): void {
   }
 }
 
+/** Within this distance of a gutter line, a released sticky snaps onto it. */
+const SNAP_PX = 24;
+
+/**
+ * Magnetic edges: released near a viewport gutter, the frame aligns to it
+ * exactly, so a wall of stickies lines up without pixel-pushing.
+ */
+export function snapFrame(frame: Frame): Frame {
+  const next = { ...frame };
+  if (Math.abs(next.x - GUTTER) < SNAP_PX) next.x = GUTTER;
+  const rightAt = window.innerWidth - GUTTER - next.width;
+  if (Math.abs(next.x - rightAt) < SNAP_PX) next.x = rightAt;
+  if (Math.abs(next.y - GUTTER) < SNAP_PX) next.y = GUTTER;
+  const bottomAt = window.innerHeight - GUTTER - next.height;
+  if (Math.abs(next.y - bottomAt) < SNAP_PX) next.y = bottomAt;
+  return next;
+}
+
 export type Edge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
 export const RESIZE_EDGES: readonly Edge[] = [

@@ -344,3 +344,17 @@
     font-size: 16px !important;
   }
 }
+
+/* Reference mode: translucent, read-only until hovered. */
+.bb-fn-sticky.bb-fn-ghost {
+  opacity: 0.55;
+  transition: opacity 140ms ease;
+}
+
+.bb-fn-sticky.bb-fn-ghost:hover {
+  opacity: 1;
+}
+
+.bb-fn-sticky.bb-fn-ghost:not(:hover) .bb-fn-sticky-body {
+  pointer-events: none;
+}

@@ -12,6 +12,7 @@ import {
   loadFrame,
   RESIZE_EDGES,
   saveFrame,
+  snapFrame,
   type Frame,
   type SizeProfile,
 } from "@/lib/frame";
@@ -40,6 +41,8 @@ export interface FloatingFrameOptions {
   active: boolean;
   /** Collapsed sticky: width and position apply, height follows content. */
   skipHeight?: boolean;
+  /** Magnetic gutters: a release near a viewport edge aligns to it. */
+  snap?: boolean;
 }
 
 export function useFloatingFrame({
@@ -48,6 +51,7 @@ export function useFloatingFrame({
   fallback,
   active,
   skipHeight = false,
+  snap = false,
 }: FloatingFrameOptions): {
   rootRef: React.RefObject<HTMLDivElement | null>;
   handleRef: React.RefObject<HTMLDivElement | null>;
@@ -84,10 +88,14 @@ export function useFloatingFrame({
     else node.style.height = `${next.height}px`;
   }, []);
 
+  const snapRef = useRef(snap);
+  snapRef.current = snap;
+
   const commitFrame = useCallback(
     (next: Frame) => {
-      applyFrame(next);
-      saveFrame(frameKey, next);
+      const settled = snapRef.current ? snapFrame(next) : next;
+      applyFrame(settled);
+      saveFrame(frameKey, settled);
     },
     [applyFrame, frameKey],
   );

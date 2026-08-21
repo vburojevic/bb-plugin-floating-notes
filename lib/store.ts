@@ -168,12 +168,14 @@ export const notesStore = {
 
   async updateNote(input: {
     id: string;
+    body?: string;
     tags?: string[];
     pinned?: boolean;
     color?: Note["color"] | null;
     stickyOpen?: boolean;
     collapsed?: boolean;
     pinnedThreadId?: string | null;
+    pinnedProjectId?: string | null;
   }): Promise<Note> {
     const { note } = await rpc.call("updateNote", input);
     upsert(note);

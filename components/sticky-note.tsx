@@ -63,6 +63,8 @@ function BarButton({
   );
 }
 
+const GHOST_KEY_PREFIX = "bb-plugin-notes:ghost:";
+
 export function StickyNote({ note, index }: { note: ListedNote; index: number }) {
   const { rootRef, handleRef, resizeEdges } = useFloatingFrame({
     frameKey: `sticky:${note.id}`,
@@ -70,7 +72,31 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
     fallback: () => defaultStickyFrame(index),
     active: true,
     skipHeight: note.collapsed,
+    snap: true,
   });
+
+  // Reference mode: translucent and read-only until hovered — a checklist
+  // that overlays the agent's output without stealing clicks. Client-side
+  // preference, per sticky.
+  const [ghost, setGhost] = useState(() => {
+    try {
+      return window.localStorage.getItem(GHOST_KEY_PREFIX + note.id) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleGhost = () => {
+    setGhost((current) => {
+      const next = !current;
+      try {
+        if (next) window.localStorage.setItem(GHOST_KEY_PREFIX + note.id, "1");
+        else window.localStorage.removeItem(GHOST_KEY_PREFIX + note.id);
+      } catch {
+        // Preference only.
+      }
+      return next;
+    });
+  };
 
   // A freshly inserted element has no previous value to transition from.
   const [armed, setArmed] = useState(false);
@@ -106,6 +132,7 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
       className={cn(
         "bb-fn-sticky fixed flex flex-col overflow-hidden rounded-lg border border-border text-card-foreground shadow-xl",
         note.color !== null ? `bb-fn-tint-${note.color}` : "",
+        ghost && !note.collapsed ? "bb-fn-ghost" : "",
       )}
     >
       <div
@@ -162,6 +189,59 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
               onSelect={() => void notesStore.updateNote({ id: note.id, color: null })}
             >
               No color
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {note.pinnedThreadId !== null || note.pinnedProjectId !== null ? (
+              <DropdownMenuItem
+                onSelect={() =>
+                  void notesStore.updateNote({
+                    id: note.id,
+                    pinnedThreadId: null,
+                    pinnedProjectId: null,
+                  })
+                }
+              >
+                <Icon name="PinOff" className="size-3.5" aria-hidden />
+                Unpin (float everywhere)
+              </DropdownMenuItem>
+            ) : (
+              <>
+                <DropdownMenuItem onSelect={togglePin}>
+                  <Icon name="Pin" className="size-3.5" aria-hidden />
+                  Pin to this thread
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    const thread = controller.activeThread();
+                    if (thread === null || thread.projectId === null) {
+                      toast.error("Open a project thread first.");
+                      return;
+                    }
+                    void notesStore.updateNote({
+                      id: note.id,
+                      pinnedProjectId: thread.projectId,
+                    });
+                    toast.success("Sticky pinned to this project");
+                  }}
+                >
+                  <Icon name="FolderGit" className="size-3.5" aria-hidden />
+                  Pin to this project
+                </DropdownMenuItem>
+              </>
+            )}
+            <DropdownMenuItem onSelect={toggleGhost}>
+              <Icon name="Layers" className="size-3.5" aria-hidden />
+              {ghost ? "Full opacity" : "Reference mode"}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                void notesStore.trashNote(note.id);
+                toast.success("Moved to trash");
+              }}
+            >
+              <Icon name="Trash2" className="size-3.5" aria-hidden />
+              Move to trash
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

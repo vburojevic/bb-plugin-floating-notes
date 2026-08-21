@@ -85,11 +85,18 @@ export function FloatingNotes() {
 
   const stickies = useMemo(() => {
     const open = openStickies(notes);
-    return open.filter(
-      (note) =>
-        note.pinnedThreadId === null ||
-        visibleThreads.some((thread) => thread.threadId === note.pinnedThreadId),
-    );
+    return open.filter((note) => {
+      // Unpinned stickies float everywhere; pinned ones only where bound.
+      if (note.pinnedThreadId === null && note.pinnedProjectId === null) {
+        return true;
+      }
+      return visibleThreads.some(
+        (thread) =>
+          thread.threadId === note.pinnedThreadId ||
+          (note.pinnedProjectId !== null &&
+            thread.projectId === note.pinnedProjectId),
+      );
+    });
   }, [notes, visibleThreads]);
 
   return (

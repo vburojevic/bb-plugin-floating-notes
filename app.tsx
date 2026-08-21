@@ -7,9 +7,9 @@
 // composer's "Insert note" plus-menu item; and the rewritten nav + thread
 // panels. Everything drives the same external controller and store, so the
 // order the pieces mount in never matters.
-import { createElement, useEffect } from "react";
+import { createElement, useCallback, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { definePluginApp } from "@bb/plugin-sdk/app";
+import { definePluginApp, useBbNavigate, useRealtime } from "@bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -18,6 +18,7 @@ import { FloatingNotes } from "@/components/floating-notes";
 import { NotesNavPanel } from "@/components/nav-panel";
 import { ThreadNotesPanel } from "@/components/thread-panel";
 import { controller } from "@/lib/controller";
+import { useControllerState } from "@/lib/hooks";
 import { notesStore } from "@/lib/store";
 import "./styles.css";
 
@@ -38,6 +39,21 @@ function ThreadHeaderNotesButton({
     () => controller.registerThread(threadId, projectId),
     [threadId, projectId],
   );
+
+  // This component doubles as the content script's bb-tree bridge: it
+  // relays realtime "changed" events into the shared store, and executes
+  // thread-navigation requests the floating surfaces cannot make themselves.
+  useRealtime(
+    "notes",
+    useCallback(() => void notesStore.refresh(), []),
+  );
+  const navigate = useBbNavigate();
+  const { navigateRequest } = useControllerState();
+  useEffect(() => {
+    if (navigateRequest === null) return;
+    controller.consumeNavigation(navigateRequest.seq);
+    navigate.toThread(navigateRequest.threadId);
+  }, [navigateRequest, navigate]);
 
   // Stickies never render on compact viewports; there the button opens the
   // scratchpad in the sheet window instead of flipping invisible flags.
@@ -161,31 +177,10 @@ export default definePluginApp((app) => {
     },
   });
 
-  app.slots.messageAction({
-    id: "scratchpad-append",
-    title: "Add to scratchpad",
-    icon: "ListTodo",
-    async run({ threadId, message, selectedText }) {
-      const text = (selectedText ?? message.text).trim();
-      if (text.length === 0) {
-        toast.error("Nothing to add from this message");
-        return;
-      }
-      try {
-        const pad = await notesStore.scratchpad(threadId);
-        const quoted = text
-          .split("\n")
-          .map((line) => `> ${line}`)
-          .join("\n");
-        await notesStore.appendToNote(pad.id, quoted);
-        toast.success("Added to the thread scratchpad");
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "Could not reach the scratchpad",
-        );
-      }
-    },
-  });
+  // Deliberately ONE message action: bb brands plugin actions with the
+  // plugin's logo (per-action icon hints are ignored when branding exists),
+  // so a second action renders as an identical twin button. Scratchpad
+  // appends live in quick capture (Tab), the thread panel, and the agent tool.
 
   app.composer.customize({
     id: "notes",

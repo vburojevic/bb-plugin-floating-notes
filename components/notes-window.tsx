@@ -24,6 +24,7 @@ import { Icon } from "@/components/ui/icon";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport";
 import { displayTitle, NoteList } from "@/components/note-list";
 import { NoteEditor } from "@/components/note-editor";
+import { EditorFooter } from "@/components/editor-footer";
 import { Palette, type PaletteAction } from "@/components/palette";
 import { useFloatingFrame } from "@/components/use-floating-frame";
 import { useControllerState, useNotesState } from "@/lib/hooks";
@@ -37,6 +38,7 @@ import {
   type ListedNote,
   type NoteColor,
 } from "@/lib/contract";
+import { parseSearchQuery } from "@/lib/notes";
 import { cn } from "@/lib/utils";
 
 const SEARCH_DEBOUNCE_MS = 150;
@@ -152,10 +154,27 @@ export function NotesWindow() {
       return;
     }
     searchTimer.current = window.setTimeout(() => {
+      const parsed = parseSearchQuery(query);
+      const currentThread =
+        parsed.threadRef === "current" ? controller.activeThread() : null;
       void rpc
-        .call("listNotes", { query, view })
+        .call("listNotes", {
+          view: parsed.view ?? view,
+          ...(parsed.text.length > 0 ? { query: parsed.text } : {}),
+          ...(parsed.tag !== undefined ? { tag: parsed.tag } : {}),
+          ...(parsed.kinds !== undefined ? { kinds: parsed.kinds } : {}),
+          ...(parsed.stickyOpen === true ? { stickyOpen: true } : {}),
+          ...(currentThread !== null ? { threadId: currentThread.threadId } : {}),
+        })
         .then((result) => {
-          if (seq === searchSeq.current) setSearchResults(result.notes);
+          if (seq !== searchSeq.current) return;
+          let rows = result.notes;
+          if (parsed.task === "open") {
+            rows = rows.filter((n) => n.taskTotal > n.taskDone);
+          } else if (parsed.task === "done") {
+            rows = rows.filter((n) => n.taskTotal > 0 && n.taskDone === n.taskTotal);
+          }
+          setSearchResults(rows);
         })
         .catch(() => {
           if (seq === searchSeq.current) setSearchResults(null);
@@ -515,44 +534,21 @@ export function NotesWindow() {
             }
           />
         )}
-        <div className="flex shrink-0 items-center gap-2 border-t border-border px-2.5 py-1 text-[11px] text-muted-foreground">
-          {selected.tags.length > 0 ? (
-            <span className="flex min-w-0 shrink items-center gap-1 overflow-hidden">
-              {selected.tags.slice(0, 4).map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => {
-                    setView("active");
-                    setQuery("");
-                    setActiveTag(tag);
-                  }}
-                  className="shrink-0 rounded-full border border-border px-1.5 leading-4 transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  #{tag}
-                </button>
-              ))}
-            </span>
-          ) : null}
-          <span className="min-w-0 flex-1 truncate">
-            {selected.kind === "scratchpad"
-              ? `Thread scratchpad${selected.threadTitle !== null ? ` · ${selected.threadTitle}` : ""} · `
-              : selected.kind === "daily"
-                ? "Daily note · "
-                : selected.kind === "inbox"
-                  ? "Inbox · "
-                  : selected.threadTitle !== null
-                    ? `from ${selected.threadTitle} · `
-                    : ""}
-            {selected.taskTotal > 0
-              ? `${selected.taskDone}/${selected.taskTotal} tasks · `
-              : ""}
-            {wordCount(selected.body)} words
-          </span>
-          <span className="shrink-0">
-            {new Date(selected.updatedAt).toLocaleString()}
-          </span>
-        </div>
+        {view === "active" ? (
+          <EditorFooter
+            note={selected}
+            notes={notes}
+            onTagClick={(tag) => {
+              setView("active");
+              setQuery("");
+              setActiveTag(tag);
+            }}
+            onOpenNote={(id) => {
+              setView("active");
+              setSelectedId(id);
+            }}
+          />
+        ) : null}
       </div>
     );
 
@@ -588,6 +584,16 @@ export function NotesWindow() {
           <Icon name="FileText" className="size-4 text-muted-foreground" aria-hidden />
           <span className="text-sm font-medium">Notes</span>
           <span className="min-w-0 flex-1" />
+          <Button
+            data-no-drag=""
+            variant="ghost"
+            size="icon"
+            className="size-7"
+            aria-label="Quick capture (Ctrl+Shift+')"
+            onClick={() => controller.openCapture()}
+          >
+            <Icon name="Zap" className="size-4" aria-label="Quick capture" />
+          </Button>
           {/* Self-labeling: the shortcut IS the button. Inbox and Today
               moved into the list as labeled rows — no more mystery icons. */}
           <button

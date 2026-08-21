@@ -1,4 +1,5 @@
 // Pure note helpers — no SDK imports so they stay unit-testable.
+import type { NoteKind } from "./contract";
 
 export function deriveTitle(body: string): string {
   for (const line of body.split("\n")) {
@@ -117,6 +118,161 @@ export function extractHashtags(body: string): string[] {
 export function appendToBody(body: string, text: string): string {
   if (body.length === 0) return text;
   return body.endsWith("\n") ? `${body}${text}` : `${body}\n${text}`;
+}
+
+/**
+ * Attachment ids referenced by `bbnote://attachment/<id>` occurrences in a
+ * body (image refs, links, or bare urls), deduped in order of first use.
+ * The GC compares this set against the attachments table after body writes.
+ */
+export function referencedAttachmentIds(body: string): string[] {
+  const ids = new Set<string>();
+  for (const match of body.matchAll(/bbnote:\/\/attachment\/([A-Za-z0-9_-]+)/g)) {
+    ids.add(match[1]!);
+  }
+  return [...ids];
+}
+
+/**
+ * Remove every reference to one attachment from a body: markdown image refs
+ * (`![alt](bbnote://attachment/<id>)`) and bare `bbnote://attachment/<id>`
+ * urls. A line the ref had to itself is dropped entirely rather than left as
+ * a stray blank; other attachments' refs (including ids this id prefixes)
+ * are untouched.
+ */
+export function stripAttachmentRefs(body: string, id: string): string {
+  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const imageRe = new RegExp(
+    `!\\[[^\\]]*\\]\\(\\s*bbnote://attachment/${escaped}\\s*\\)`,
+    "g",
+  );
+  const bareRe = new RegExp(
+    `bbnote://attachment/${escaped}(?![A-Za-z0-9_-])`,
+    "g",
+  );
+  const kept: string[] = [];
+  for (const line of body.split("\n")) {
+    const stripped = line.replace(imageRe, "").replace(bareRe, "");
+    if (
+      stripped !== line &&
+      stripped.trim().length === 0 &&
+      line.trim().length > 0
+    ) {
+      continue; // The ref was alone on this line — collapse the leftover blank.
+    }
+    kept.push(stripped);
+  }
+  return kept.join("\n");
+}
+
+/**
+ * The unchecked task lines of a body, original indentation preserved, capped
+ * at 30 (daily-note carry-over). Same line grammar as countTasks.
+ */
+export function uncheckedTaskLines(body: string): string[] {
+  const lines: string[] = [];
+  for (const line of body.split("\n")) {
+    const match = /^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+\[( |x|X)\](?=[ \t]|$)/.exec(line);
+    if (match === null || match[1] !== " ") continue;
+    lines.push(line);
+    if (lines.length >= 30) break;
+  }
+  return lines;
+}
+
+export interface ParsedSearchQuery {
+  /** The free-text remainder after operators are pulled out. */
+  text: string;
+  tag?: string;
+  kinds?: NoteKind[];
+  view?: "trash";
+  stickyOpen?: true;
+  task?: "open" | "done";
+  threadRef?: "current";
+}
+
+/** `in:` operator values → note kinds (plural forms map to their kind). */
+const IN_KIND_TOKENS = new Map<string, NoteKind>([
+  ["notes", "note"],
+  ["scratchpads", "scratchpad"],
+  ["scratchpad", "scratchpad"],
+  ["daily", "daily"],
+  ["inbox", "inbox"],
+]);
+
+/**
+ * Parse search-box operators out of a raw query. Whitespace-separated
+ * tokens: `tag:x` / whole-token `#x` → tag, `in:<kind>` → kinds,
+ * `in:trash` → trash view, `is:sticky` → open stickies, `is:tasks`/`is:open`
+ * → open tasks, `is:done` → done tasks, `thread:current` → current thread.
+ * Anything else — including unknown `x:y` operators — joins the free text.
+ */
+export function parseSearchQuery(raw: string): ParsedSearchQuery {
+  const result: ParsedSearchQuery = { text: "" };
+  const text: string[] = [];
+  const kinds: NoteKind[] = [];
+  for (const token of raw.split(/\s+/)) {
+    if (token.length === 0) continue;
+    const lower = token.toLowerCase();
+    if (lower.startsWith("tag:") && lower.length > 4) {
+      result.tag = lower.slice(4).replace(/^#/, "");
+      continue;
+    }
+    if (lower.startsWith("#") && lower.length > 1) {
+      result.tag = lower.slice(1);
+      continue;
+    }
+    if (lower.startsWith("in:")) {
+      const value = lower.slice(3);
+      if (value === "trash") {
+        result.view = "trash";
+        continue;
+      }
+      const kind = IN_KIND_TOKENS.get(value);
+      if (kind !== undefined) {
+        if (!kinds.includes(kind)) kinds.push(kind);
+        continue;
+      }
+      // Unknown in: value falls through to the free text.
+    }
+    if (lower === "is:sticky") {
+      result.stickyOpen = true;
+      continue;
+    }
+    if (lower === "is:tasks" || lower === "is:open") {
+      result.task = "open";
+      continue;
+    }
+    if (lower === "is:done") {
+      result.task = "done";
+      continue;
+    }
+    if (lower === "thread:current") {
+      result.threadRef = "current";
+      continue;
+    }
+    text.push(token);
+  }
+  result.text = text.join(" ");
+  if (kinds.length > 0) result.kinds = kinds;
+  return result;
+}
+
+/**
+ * Filename-safe slug from a note title (export files): lowercased ASCII with
+ * dash separators, diacritics folded, capped at 60 chars, "untitled" when
+ * nothing survives.
+ */
+export function slug(title: string): string {
+  const cleaned = title
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60)
+    .replace(/-+$/, "");
+  return cleaned.length > 0 ? cleaned : "untitled";
 }
 
 /** Align rows into two-space-guttered columns for plain-text CLI tables. */

@@ -9,7 +9,12 @@ import {
   highlightRuns,
   localDateKey,
   normalizeTags,
+  parseSearchQuery,
+  referencedAttachmentIds,
+  slug,
   snippetFromBody,
+  stripAttachmentRefs,
+  uncheckedTaskLines,
 } from "./notes";
 
 describe("deriveTitle", () => {
@@ -189,5 +194,179 @@ describe("extractHashtags", () => {
   });
   it("requires a leading letter and at least two characters", () => {
     expect(extractHashtags("#a #_x #9lives #ok")).toEqual(["ok"]);
+  });
+});
+
+describe("referencedAttachmentIds", () => {
+  it("finds ids in image refs and bare urls", () => {
+    const body =
+      "![shot](bbnote://attachment/abc123def0)\nsee bbnote://attachment/ffff000011";
+    expect(referencedAttachmentIds(body)).toEqual(["abc123def0", "ffff000011"]);
+  });
+  it("dedupes repeated refs, keeping first-use order", () => {
+    const body =
+      "bbnote://attachment/bbb ![x](bbnote://attachment/aaa) bbnote://attachment/bbb";
+    expect(referencedAttachmentIds(body)).toEqual(["bbb", "aaa"]);
+  });
+  it("returns empty for bodies without refs", () => {
+    expect(referencedAttachmentIds("")).toEqual([]);
+    expect(referencedAttachmentIds("plain text, no attachments")).toEqual([]);
+    expect(referencedAttachmentIds("bbnote://note/abc is not an attachment")).toEqual([]);
+  });
+});
+
+describe("stripAttachmentRefs", () => {
+  it("drops the whole line when the image ref was alone on it", () => {
+    const body = "before\n![shot](bbnote://attachment/aaa)\nafter";
+    expect(stripAttachmentRefs(body, "aaa")).toBe("before\nafter");
+  });
+  it("drops a ref-only line even when it is padded with whitespace", () => {
+    const body = "before\n  ![shot](bbnote://attachment/aaa)  \nafter";
+    expect(stripAttachmentRefs(body, "aaa")).toBe("before\nafter");
+  });
+  it("keeps the line when text surrounds the ref", () => {
+    expect(stripAttachmentRefs("see ![s](bbnote://attachment/aaa) here", "aaa")).toBe(
+      "see  here",
+    );
+  });
+  it("strips bare urls", () => {
+    expect(stripAttachmentRefs("img at bbnote://attachment/aaa today", "aaa")).toBe(
+      "img at  today",
+    );
+  });
+  it("leaves other ids alone, including ids the target prefixes", () => {
+    const body =
+      "![a](bbnote://attachment/aaa1)\nbbnote://attachment/aaa1 and ![b](bbnote://attachment/bbb)";
+    expect(stripAttachmentRefs(body, "aaa")).toBe(body);
+  });
+  it("returns the body unchanged when the id is absent", () => {
+    expect(stripAttachmentRefs("no refs here", "aaa")).toBe("no refs here");
+    expect(stripAttachmentRefs("", "aaa")).toBe("");
+  });
+  it("strips every occurrence across the body", () => {
+    const body =
+      "![one](bbnote://attachment/aaa)\ntext ![two](bbnote://attachment/aaa) tail";
+    expect(stripAttachmentRefs(body, "aaa")).toBe("text  tail");
+  });
+});
+
+describe("uncheckedTaskLines", () => {
+  it("returns only unchecked task lines, indentation preserved", () => {
+    const body = [
+      "# Daily",
+      "- [ ] top level",
+      "  - [ ] nested",
+      "\t- [ ] tabbed",
+      "- [x] done",
+      "* [X] also done",
+      "1. [ ] ordered",
+      "2) [ ] paren ordered",
+      "plain line",
+    ].join("\n");
+    expect(uncheckedTaskLines(body)).toEqual([
+      "- [ ] top level",
+      "  - [ ] nested",
+      "\t- [ ] tabbed",
+      "1. [ ] ordered",
+      "2) [ ] paren ordered",
+    ]);
+  });
+  it("counts a bare box at end of line, matching countTasks", () => {
+    expect(uncheckedTaskLines("- [ ]")).toEqual(["- [ ]"]);
+  });
+  it("ignores malformed boxes", () => {
+    expect(uncheckedTaskLines("- [y] bad\n-[ ] tight\n[ ] bare")).toEqual([]);
+  });
+  it("caps at 30 lines", () => {
+    const body = Array.from({ length: 40 }, (_, i) => `- [ ] task ${i}`).join("\n");
+    const lines = uncheckedTaskLines(body);
+    expect(lines.length).toBe(30);
+    expect(lines[0]).toBe("- [ ] task 0");
+    expect(lines[29]).toBe("- [ ] task 29");
+  });
+  it("returns empty for empty bodies", () => {
+    expect(uncheckedTaskLines("")).toEqual([]);
+  });
+});
+
+describe("parseSearchQuery", () => {
+  it("returns plain text untouched", () => {
+    expect(parseSearchQuery("hello world")).toEqual({ text: "hello world" });
+  });
+  it("collapses extra whitespace in the free text", () => {
+    expect(parseSearchQuery("  spaced   words  ")).toEqual({ text: "spaced words" });
+  });
+  it("parses tag: and whole-token # into tag, lowercased", () => {
+    expect(parseSearchQuery("tag:Work")).toEqual({ text: "", tag: "work" });
+    expect(parseSearchQuery("#API docs")).toEqual({ text: "docs", tag: "api" });
+  });
+  it("maps in: values to kinds, plurals included, deduplicated", () => {
+    expect(parseSearchQuery("in:notes")).toEqual({ text: "", kinds: ["note"] });
+    expect(parseSearchQuery("in:scratchpads in:scratchpad")).toEqual({
+      text: "",
+      kinds: ["scratchpad"],
+    });
+    expect(parseSearchQuery("in:daily in:inbox")).toEqual({
+      text: "",
+      kinds: ["daily", "inbox"],
+    });
+  });
+  it("parses in:trash as the trash view", () => {
+    expect(parseSearchQuery("in:trash old stuff")).toEqual({
+      text: "old stuff",
+      view: "trash",
+    });
+  });
+  it("parses is: and thread: operators", () => {
+    expect(parseSearchQuery("is:sticky")).toEqual({ text: "", stickyOpen: true });
+    expect(parseSearchQuery("is:tasks")).toEqual({ text: "", task: "open" });
+    expect(parseSearchQuery("is:open")).toEqual({ text: "", task: "open" });
+    expect(parseSearchQuery("is:done")).toEqual({ text: "", task: "done" });
+    expect(parseSearchQuery("thread:current")).toEqual({
+      text: "",
+      threadRef: "current",
+    });
+  });
+  it("keeps unknown operators and values in the text", () => {
+    expect(parseSearchQuery("foo:bar baz")).toEqual({ text: "foo:bar baz" });
+    expect(parseSearchQuery("in:everything")).toEqual({ text: "in:everything" });
+    expect(parseSearchQuery("is:weird")).toEqual({ text: "is:weird" });
+  });
+  it("keeps bare # and empty tag: in the text", () => {
+    expect(parseSearchQuery("# tag:")).toEqual({ text: "# tag:" });
+  });
+  it("combines operators and text", () => {
+    expect(parseSearchQuery("bug tag:work in:notes is:open")).toEqual({
+      text: "bug",
+      tag: "work",
+      kinds: ["note"],
+      task: "open",
+    });
+  });
+  it("returns empty text for an empty query", () => {
+    expect(parseSearchQuery("")).toEqual({ text: "" });
+    expect(parseSearchQuery("   ")).toEqual({ text: "" });
+  });
+});
+
+describe("slug", () => {
+  it("lowercases and joins words with dashes", () => {
+    expect(slug("Hello, World!")).toBe("hello-world");
+    expect(slug("Release   checklist (v2)")).toBe("release-checklist-v2");
+  });
+  it("folds diacritics to ascii", () => {
+    expect(slug("Café au lait")).toBe("cafe-au-lait");
+  });
+  it("trims leading and trailing separators", () => {
+    expect(slug("--- spaced ---")).toBe("spaced");
+  });
+  it("caps at 60 chars without a trailing dash", () => {
+    expect(slug("a".repeat(100)).length).toBe(60);
+    expect(slug(`${"x".repeat(59)} ${"y".repeat(10)}`)).toBe("x".repeat(59));
+  });
+  it("falls back to untitled when nothing survives", () => {
+    expect(slug("")).toBe("untitled");
+    expect(slug("!!!")).toBe("untitled");
+    expect(slug("日本語")).toBe("untitled");
   });
 });
