@@ -47,12 +47,19 @@ function ThreadHeaderNotesButton({
       onClick={async () => {
         try {
           const pad = await notesStore.scratchpad(threadId, projectId);
-          await notesStore.updateNote({
-            id: pad.id,
-            stickyOpen: true,
-            collapsed: false,
-            pinnedThreadId: threadId,
-          });
+          // A toggle with feedback: clicking must always visibly do something.
+          if (pad.stickyOpen && pad.pinnedThreadId === threadId) {
+            await notesStore.updateNote({ id: pad.id, stickyOpen: false });
+            toast.success("Scratchpad hidden");
+          } else {
+            await notesStore.updateNote({
+              id: pad.id,
+              stickyOpen: true,
+              collapsed: false,
+              pinnedThreadId: threadId,
+            });
+            toast.success("Scratchpad floating over this thread");
+          }
         } catch (error) {
           toast.error(
             error instanceof Error ? error.message : "Could not open the scratchpad",
@@ -60,7 +67,7 @@ function ThreadHeaderNotesButton({
         }
       }}
     >
-      <Icon name="Edit" className="size-4" aria-label="Thread scratchpad" />
+      <Icon name="FileText" className="size-4" aria-label="Thread scratchpad" />
     </Button>
   );
 }

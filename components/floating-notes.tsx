@@ -8,6 +8,7 @@ import { NotesWindow } from "@/components/notes-window";
 import { StickyNote } from "@/components/sticky-note";
 import { CaptureBar } from "@/components/capture-bar";
 import { NotePicker } from "@/components/note-picker";
+import { SurfaceBoundary } from "@/components/error-boundary";
 import { controller } from "@/lib/controller";
 import { useControllerState, useNotesState } from "@/lib/hooks";
 import { notesStore, openStickies } from "@/lib/store";
@@ -93,16 +94,26 @@ export function FloatingNotes() {
 
   return (
     <TooltipProvider delayDuration={400}>
-      <NotesWindow />
+      <SurfaceBoundary name="window">
+        <NotesWindow />
+      </SurfaceBoundary>
       {/* A 300px card floating over a 390px screen is clutter; on the sheet
           every note is one tap away inside the window instead. */}
       {sheet
         ? null
         : stickies.map((note, index) => (
-            <StickyNote key={note.id} note={note} index={index} />
+            <SurfaceBoundary key={note.id} name={`sticky ${note.id}`}>
+              <StickyNote note={note} index={index} />
+            </SurfaceBoundary>
           ))}
-      <CaptureBar />
-      {notePickerTarget !== null ? <NotePicker target={notePickerTarget} /> : null}
+      <SurfaceBoundary name="capture bar">
+        <CaptureBar />
+      </SurfaceBoundary>
+      {notePickerTarget !== null ? (
+        <SurfaceBoundary name="note picker">
+          <NotePicker target={notePickerTarget} />
+        </SurfaceBoundary>
+      ) : null}
     </TooltipProvider>
   );
 }
