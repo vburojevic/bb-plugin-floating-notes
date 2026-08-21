@@ -325,3 +325,22 @@
   z-index: 69;
   pointer-events: none;
 }
+
+/* ------------------------------------------------------------ iOS no-zoom */
+
+/*
+ * iOS zooms the entire page when a focused input's font-size is under 16px.
+ * On coarse pointers every text-entry surface in this plugin renders at
+ * exactly 16px — the documented threshold — so focusing search, capture,
+ * the palette, or the editor never zooms bb. !important outranks both the
+ * scoped utility classes and CodeMirror's injected stylesheet.
+ */
+@media (pointer: coarse) {
+  .bb-fn-input {
+    font-size: 16px !important;
+  }
+
+  .bb-fn-editor .cm-content {
+    font-size: 16px !important;
+  }
+}

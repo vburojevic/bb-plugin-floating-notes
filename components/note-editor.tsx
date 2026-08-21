@@ -136,7 +136,7 @@ export function NoteEditor({
   );
 
   return (
-    <div ref={containerRef} className={cn("min-h-0 flex-1 overflow-hidden", className)}>
+    <div ref={containerRef} className={cn("bb-fn-editor min-h-0 flex-1 overflow-hidden", className)}>
       {editor}
     </div>
   );

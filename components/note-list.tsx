@@ -344,7 +344,7 @@ export function NoteList({
             onChange={(event) => onQueryChange(event.target.value)}
             placeholder={trashView ? "Search trash…" : "Search notes…"}
             aria-label="Search notes"
-            className="h-8 pl-7 text-sm"
+            className="bb-fn-input h-8 pl-7 text-sm"
           />
         </div>
         {!trashView ? (

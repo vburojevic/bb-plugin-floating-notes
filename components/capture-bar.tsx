@@ -108,7 +108,7 @@ export function CaptureBar() {
             }}
             placeholder="Capture a thought…"
             aria-label="Capture text"
-            className="block w-full resize-none bg-transparent px-3.5 py-3 text-sm outline-none placeholder:text-muted-foreground"
+            className="bb-fn-input block w-full resize-none bg-transparent px-3.5 py-3 text-sm outline-none placeholder:text-muted-foreground"
           />
           <div className="flex items-center justify-between border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1">

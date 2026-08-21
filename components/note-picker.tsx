@@ -76,7 +76,7 @@ export function NotePicker({ target }: { target: ComposerInsertTarget }) {
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Insert which note?"
             aria-label="Search notes to insert"
-            className="h-10 rounded-none border-0 border-b border-border text-sm focus-visible:ring-0"
+            className="bb-fn-input h-10 rounded-none border-0 border-b border-border text-sm focus-visible:ring-0"
           />
           <div className="bb-fn-quiet-scroll max-h-72 overflow-y-auto p-1">
             {rows.length === 0 ? (
