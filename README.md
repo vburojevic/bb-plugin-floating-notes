@@ -47,9 +47,11 @@ with `Ctrl+Shift+'`.
   until hovered. Changes from agents or the CLI appear instantly
   (realtime), and `bb notes export/import <dir>` round-trips your notes as
   markdown files with front-matter.
-- **Chat both ways.** "Save as note" / "Add to scratchpad" on every message
-  (and on selected text); "Insert note" in the composer's `+` menu pastes a
-  note into the draft; `@note` mentions resolve fresh at send time.
+- **Chat both ways.** "Save as note" on every message and text selection
+  (one action by design — bb brands plugin message actions with the plugin
+  logo, so a second would render as an identical twin); "Insert note" in
+  the composer's `+` menu pastes a note into the draft; `@note` mentions
+  resolve fresh at send time.
 - **CLI and agent tools.** `bb notes list|search|show|add|append|tag|pin|
   trash|restore|purge|daily|scratchpad` — and `notes_search`, `notes_read`,
   `notes_write`, `notes_trash`, `notes_scratchpad` for agents. FTS5-backed
