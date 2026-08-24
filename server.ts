@@ -4,7 +4,10 @@
 // lib/contract.ts; every mutation runs through a serialize mutex and publishes
 // a realtime "changed" signal after commit.
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+// fs/promises, deliberately: export/import walk every note/file in one CLI
+// call, and plugins run in-process — a sync loop here blocks the whole bb
+// server for its duration (perf-watch traced a 79s handler to exactly that).
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { type BbPluginApi } from "@bb/plugin-sdk";
 import { z } from "zod";
@@ -1346,13 +1349,13 @@ export default async function plugin(bb: BbPluginApi) {
                 "SELECT * FROM notes WHERE trashed_at IS NULL ORDER BY created_at ASC",
               )
               .all() as NoteRow[];
-            mkdirSync(dir, { recursive: true });
+            await mkdir(dir, { recursive: true });
             const attachmentsDir = join(dir, "_attachments");
             let attachmentsDirMade = false;
             let attachmentCount = 0;
             for (const row of rows) {
               const note = rowToNote(row);
-              writeFileSync(
+              await writeFile(
                 join(dir, `${slug(note.title)}-${note.id.slice(0, 8)}.md`),
                 exportMarkdown(note),
               );
@@ -1363,10 +1366,10 @@ export default async function plugin(bb: BbPluginApi) {
                 .all(note.id) as Array<{ id: string; mime: string; bytes: Buffer }>;
               for (const blob of blobs) {
                 if (!attachmentsDirMade) {
-                  mkdirSync(attachmentsDir, { recursive: true });
+                  await mkdir(attachmentsDir, { recursive: true });
                   attachmentsDirMade = true;
                 }
-                writeFileSync(
+                await writeFile(
                   join(attachmentsDir, `${blob.id}.${extFromMime(blob.mime)}`),
                   blob.bytes,
                 );
@@ -1387,7 +1390,7 @@ export default async function plugin(bb: BbPluginApi) {
               : resolve(ctx.cwd ?? process.cwd(), dirArg);
             let names: string[];
             try {
-              names = readdirSync(dir).filter((name) => name.endsWith(".md"));
+              names = (await readdir(dir)).filter((name) => name.endsWith(".md"));
             } catch (error) {
               return {
                 exitCode: 1,
@@ -1400,7 +1403,7 @@ export default async function plugin(bb: BbPluginApi) {
             for (const name of names.sort()) {
               let raw: string;
               try {
-                raw = readFileSync(join(dir, name), "utf8");
+                raw = await readFile(join(dir, name), "utf8");
               } catch {
                 warnings.push(`Skipped ${name}: unreadable`);
                 continue;
