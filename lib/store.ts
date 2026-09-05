@@ -64,8 +64,29 @@ function emit(): void {
 }
 
 function setState(patch: Partial<NotesState>): void {
-  state = { ...state, ...patch };
+  const next = shareUnchanged(state, { ...state, ...patch });
+  if (next === state) return;
+  state = next;
   emit();
+}
+
+/** RPC snapshots are JSON. Keep unchanged branches so idle polls do not
+ * invalidate every mounted editor, sticky, and picker. Compare strings in
+ * place rather than serializing note bodies into another large string. */
+function shareUnchanged<T>(previous: T, next: T): T {
+  if (previous === next) return previous;
+  if (previous === null || next === null || typeof previous !== "object" || typeof next !== "object") return next;
+  if (Array.isArray(previous) !== Array.isArray(next)) return next;
+  const before = previous as Record<string, unknown>;
+  const after = next as Record<string, unknown>;
+  const keys = Object.keys(after);
+  let equal = Object.keys(before).length === keys.length;
+  const shared: Record<string, unknown> = Array.isArray(next) ? [] as unknown as Record<string, unknown> : {};
+  for (const key of keys) {
+    shared[key] = shareUnchanged(before[key], after[key]);
+    if (!Object.prototype.hasOwnProperty.call(before, key) || shared[key] !== before[key]) equal = false;
+  }
+  return equal ? previous : shared as T;
 }
 
 /** Local upsert so a mutation's result lands without waiting for a refresh. */
