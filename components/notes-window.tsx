@@ -22,7 +22,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport";
-import { displayTitle, NoteList } from "@/components/note-list";
+import { displayTitle, NoteList, SCOPE_ICON } from "@/components/note-list";
+import { noteScope, type ScopeFilter } from "@/lib/scope";
 import { NoteEditor } from "@/components/note-editor";
 import { EditorFooter } from "@/components/editor-footer";
 import { Palette, type PaletteAction } from "@/components/palette";
@@ -59,7 +60,7 @@ function wordCount(body: string): number {
 }
 
 export function NotesWindow() {
-  const { windowOpen: open, focusNoteId } = useControllerState();
+  const { windowOpen: open, focusNoteId, captureOpen } = useControllerState();
   const { notes, tags, counts, config, loaded, error } = useNotesState();
 
   const sheet = useIsCompactViewport();
@@ -79,6 +80,7 @@ export function NotesWindow() {
       return null;
     }
   });
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>({ kind: "all" });
   const [paletteOpen, setPaletteOpen] = useState(false);
   /** The note whose editor should grab focus (just created). */
   const [focusEditorId, setFocusEditorId] = useState<string | null>(null);
@@ -117,6 +119,29 @@ export function NotesWindow() {
   useEffect(() => {
     if (open && !sheet && rootRef.current !== null) raiseLayer(rootRef.current);
   }, [open, sheet, rootRef]);
+
+  // Opening the window hands it the keyboard, so the shortcuts its header
+  // advertises (⌘K, ⌘N, ⌘F) work on the first press instead of only after a
+  // click lands inside. Focusing the shell — not the search field — keeps a
+  // phone's software keyboard down. Closing the palette hands focus back for
+  // the same reason: otherwise the next shortcut lands on the page body and
+  // does nothing.
+  useEffect(() => {
+    // Never while an overlay owns the keyboard: the capture bar's textarea
+    // and the palette's input both live outside this shell, so refocusing
+    // here would yank the caret out of whatever the user is typing into.
+    if (!open || !mounted || paletteOpen || captureOpen) return;
+    const raf = window.requestAnimationFrame(() => {
+      const root = rootRef.current;
+      if (root === null) return;
+      // Never steal focus from something the user is typing in.
+      if (root.contains(document.activeElement) && document.activeElement !== root) {
+        return;
+      }
+      root.focus();
+    });
+    return () => window.cancelAnimationFrame(raf);
+  }, [open, mounted, paletteOpen, captureOpen, rootRef]);
 
   // Only the sheet needs keyboard-aware geometry.
   useEffect(() => {
@@ -380,7 +405,7 @@ export function NotesWindow() {
 
   const editorPane =
     selected === null ? (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 p-6 text-center">
+      <div className="bb-fn-editor-pane flex min-h-0 flex-col items-center justify-center gap-1 p-6 text-center">
         <p className="text-sm text-muted-foreground">
           {loaded ? "Select a note, or start one." : "Loading notes…"}
         </p>
@@ -393,8 +418,13 @@ export function NotesWindow() {
         )}
       </div>
     ) : (
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="bb-fn-editor-pane flex min-h-0 flex-col">
         <div className="flex shrink-0 items-center gap-0.5 border-b border-border px-2 py-1">
+          <Icon
+            name={SCOPE_ICON[noteScope(selected).kind]}
+            className="size-3.5 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
           <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
             {displayTitle(selected)}
           </span>
@@ -568,9 +598,10 @@ export function NotesWindow() {
         aria-modal="false"
         aria-label="Floating notes"
         aria-hidden={!open}
+        tabIndex={-1}
         data-state={open && armed ? "open" : "closed"}
         data-layout={sheet ? "sheet" : "window"}
-        className="bb-fn-window fixed flex flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl"
+        className="bb-fn-window fixed flex flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-2xl outline-none"
         onKeyDown={onKeyDown}
       >
         <div
@@ -624,6 +655,8 @@ export function NotesWindow() {
             trashedCount={counts.trashed}
             query={query}
             onQueryChange={setQuery}
+            scopeFilter={scopeFilter}
+            onScopeFilterChange={setScopeFilter}
             searchInputRef={searchInputRef}
             onOpenInbox={() => void openInbox()}
             onOpenDaily={() => void openDaily()}
@@ -650,15 +683,14 @@ export function NotesWindow() {
               });
             }}
             className={cn(
-              "shrink-0 border-r border-border",
+              "bb-fn-list-pane border-r border-border",
               sheet && selected !== null ? "hidden" : "",
-              sheet ? "w-full" : "w-60",
             )}
           />
           {/* On the sheet, the editor replaces the list; a back affordance
               lives in its header via deselect. */}
           {sheet && selected !== null ? (
-            <div className="flex min-h-0 flex-1 flex-col">
+            <div className="bb-fn-editor-pane flex min-h-0 flex-col">
               <button
                 type="button"
                 className="flex shrink-0 items-center gap-1 px-2 py-1 text-xs text-muted-foreground"

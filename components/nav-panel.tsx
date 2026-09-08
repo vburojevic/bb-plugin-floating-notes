@@ -5,7 +5,8 @@ import { useRealtime } from "@bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
-import { displayTitle, NoteList } from "@/components/note-list";
+import { displayTitle, NoteList, SCOPE_ICON } from "@/components/note-list";
+import { noteScope, type ScopeFilter } from "@/lib/scope";
 import { NoteEditor } from "@/components/note-editor";
 import { useNotesState } from "@/lib/hooks";
 import { controller } from "@/lib/controller";
@@ -25,6 +26,7 @@ export function NotesNavPanel() {
   const [searchResults, setSearchResults] = useState<ListedNote[] | null>(null);
   const [trashNotes, setTrashNotes] = useState<ListedNote[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>({ kind: "all" });
 
   useEffect(() => {
     void notesStore.refresh();
@@ -142,13 +144,15 @@ export function NotesNavPanel() {
   }, []);
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="bb-fn-panel flex h-full min-h-0">
       <NoteList
         notes={visibleNotes}
         tags={tags}
         trashedCount={counts.trashed}
         query={query}
         onQueryChange={setQuery}
+        scopeFilter={scopeFilter}
+        onScopeFilterChange={setScopeFilter}
         activeTag={activeTag}
         onTagChange={setActiveTag}
         view={view}
@@ -164,10 +168,10 @@ export function NotesNavPanel() {
         onRestore={(id) => void notesStore.restoreNote(id).then(refreshTrash)}
         onPurge={(id) => void notesStore.purgeNote(id).then(refreshTrash)}
         onEmptyTrash={() => void notesStore.emptyTrash().then(refreshTrash)}
-        className="w-72 shrink-0 border-r border-border"
+        className="bb-fn-list-pane border-r border-border"
       />
       {selected === null ? (
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 p-8 text-center">
+        <div className="bb-fn-editor-pane flex min-h-0 flex-col items-center justify-center gap-1 p-8 text-center">
           <p className="text-sm text-muted-foreground">
             {loaded ? "Select a note, or start one." : "Loading notes…"}
           </p>
@@ -176,8 +180,13 @@ export function NotesNavPanel() {
           ) : null}
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="bb-fn-editor-pane flex min-h-0 flex-col">
           <div className="flex shrink-0 items-center gap-0.5 border-b border-border px-3 py-1.5">
+            <Icon
+              name={SCOPE_ICON[noteScope(selected).kind]}
+              className="size-4 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
             <span className="min-w-0 flex-1 truncate text-sm font-medium">
               {displayTitle(selected)}
             </span>

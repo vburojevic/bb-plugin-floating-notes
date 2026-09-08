@@ -21,7 +21,8 @@ import { controller } from "@/lib/controller";
 import { notesStore } from "@/lib/store";
 import { defaultStickyFrame, STICKY_PROFILE } from "@/lib/frame";
 import { noteColorSchema, type ListedNote, type NoteColor } from "@/lib/contract";
-import { displayTitle } from "@/components/note-list";
+import { displayTitle, SCOPE_ICON } from "@/components/note-list";
+import { noteScope } from "@/lib/scope";
 import { cn } from "@/lib/utils";
 
 const COLOR_LABEL: Record<NoteColor, string> = {
@@ -33,32 +34,36 @@ const COLOR_LABEL: Record<NoteColor, string> = {
   peach: "Peach",
 };
 
+/**
+ * A title-bar control. Always rendered — the old `opacity-0` until hover hid
+ * half the bar at rest and made those controls unreachable entirely on a
+ * touch screen, where there is no hover. They sit dimmed instead and come up
+ * to full strength with the pointer or keyboard focus.
+ */
 function BarButton({
   icon,
   label,
   onClick,
   className,
-  subtle = true,
 }: {
   icon: Parameters<typeof Icon>[0]["name"];
   label: string;
   onClick: () => void;
   className?: string;
-  subtle?: boolean;
 }) {
   return (
     <button
       type="button"
       data-no-drag=""
       title={label}
+      aria-label={label}
       onClick={onClick}
       className={cn(
-        "flex size-5 shrink-0 items-center justify-center rounded transition-colors hover:bg-foreground/10",
-        subtle ? "opacity-0 group-hover/bar:opacity-100 focus-visible:opacity-100" : "",
+        "bb-fn-bar-button flex size-5 shrink-0 items-center justify-center rounded transition-colors hover:bg-foreground/10",
         className,
       )}
     >
-      <Icon name={icon} className="size-3.5" aria-label={label} />
+      <Icon name={icon} className="size-3.5" aria-hidden />
     </button>
   );
 }
@@ -105,6 +110,7 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
     return () => window.cancelAnimationFrame(raf);
   }, []);
 
+  const scope = noteScope(note);
   const pinned = note.pinnedThreadId !== null;
 
   const togglePin = () => {
@@ -129,6 +135,7 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
       aria-label={`Sticky note: ${displayTitle(note)}`}
       data-state={armed ? "open" : "closed"}
       data-collapsed={note.collapsed ? "true" : "false"}
+      data-scope={scope.kind}
       className={cn(
         "bb-fn-sticky fixed flex flex-col overflow-hidden rounded-lg border border-border text-card-foreground shadow-xl",
         note.color !== null ? `bb-fn-tint-${note.color}` : "",
@@ -246,7 +253,15 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <span className="min-w-0 flex-1 truncate text-xs font-medium">
+        <Icon
+          name={SCOPE_ICON[scope.kind]}
+          className="size-3 shrink-0 opacity-70"
+          aria-hidden
+        />
+        <span
+          className="min-w-0 flex-1 truncate text-xs font-medium"
+          title={`${displayTitle(note)} — ${scope.label}`}
+        >
           {displayTitle(note)}
         </span>
 
@@ -262,7 +277,6 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
               : "Pin to current thread"
           }
           onClick={togglePin}
-          subtle={!pinned}
           className={pinned ? "text-primary" : ""}
         />
         <BarButton
@@ -280,7 +294,6 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
         <BarButton
           icon="X"
           label="Close sticky"
-          subtle={false}
           onClick={() => void notesStore.updateNote({ id: note.id, stickyOpen: false })}
         />
       </div>

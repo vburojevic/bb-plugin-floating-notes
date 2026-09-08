@@ -55,6 +55,12 @@ export const listedNoteSchema = noteSchema.extend({
    * server-side so every surface can say WHERE a note lives.
    */
   threadTitle: z.string().nullable(),
+  /**
+   * Name of the project this note belongs to (its origin project, or the
+   * project a sticky is pinned to). Null means the note is global — it is
+   * not tied to any one project.
+   */
+  projectName: z.string().nullable(),
 });
 export type ListedNote = z.infer<typeof listedNoteSchema>;
 

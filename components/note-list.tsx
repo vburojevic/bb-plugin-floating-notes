@@ -1,14 +1,23 @@
-// The note list: Inbox/Today smart rows, then scope sections — Pinned, your
-// notes, thread scratchpads, daily notes — so a row's reach is never a
-// mystery. Search and tag filters flatten to results with per-row context
-// labels. Shared by the floating window and the nav panel, so the vocabulary
-// never shifts between surfaces.
+// The note list: smart rows for the singletons, then one section per scope —
+// each project by name, then global notes, thread scratchpads and daily
+// notes. Every row carries a scope glyph and a tinted left edge, so "is this
+// a project note or a global one" is answered at a glance rather than by
+// reading. Search and tag filters flatten the list to ranked results, where
+// each row spells its scope out instead of relying on its section.
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { ProgressRing } from "@/components/progress-ring";
-import { highlightRuns, snippetFromBody } from "@/lib/notes";
+import { highlightRuns, localDateKey, snippetFromBody } from "@/lib/notes";
+import {
+  groupNotesByScope,
+  matchesScopeFilter,
+  noteScope,
+  projectsInNotes,
+  type ScopeFilter,
+  type ScopeKind,
+} from "@/lib/scope";
 import type { ListedNote, TagCount } from "@/lib/contract";
 import { cn } from "@/lib/utils";
 
@@ -62,10 +71,23 @@ function QueryRuns({ text, query }: { text: string; query: string }) {
   );
 }
 
-const KIND_ICON: Partial<Record<ListedNote["kind"], IconName>> = {
-  daily: "Calendar",
+/** One glyph per scope family — the same glyph the section header uses. */
+export const SCOPE_ICON: Record<ScopeKind, IconName> = {
+  project: "FolderGit",
+  thread: "MessageSquare",
   scratchpad: "MessageSquare",
+  daily: "Calendar",
   inbox: "Archive",
+  global: "Globe",
+};
+
+const SCOPE_CLASS: Record<ScopeKind, string> = {
+  project: "bb-fn-scope-project",
+  thread: "bb-fn-scope-thread",
+  scratchpad: "bb-fn-scope-thread",
+  daily: "bb-fn-scope-daily",
+  inbox: "bb-fn-scope-inbox",
+  global: "bb-fn-scope-global",
 };
 
 /** What the row is called: a scratchpad is named for its thread. */
@@ -76,25 +98,10 @@ export function displayTitle(note: ListedNote): string {
   return note.title;
 }
 
-/**
- * The scope line under the title. In sectioned mode the section header
- * already says "scratchpad"/"daily", so only cross-scope facts (a captured
- * note's origin thread) show; flat mode (search results) labels everything.
- */
-function contextLabel(note: ListedNote, flat: boolean): string | null {
-  if (note.kind === "scratchpad") {
-    return flat ? "Thread scratchpad" : null;
-  }
-  if (note.kind === "daily") return flat ? "Daily note" : null;
-  if (note.kind === "inbox") return flat ? "Inbox" : null;
-  if (note.threadTitle !== null) return `from ${note.threadTitle}`;
-  return null;
-}
-
 function NoteRow({
   note,
   query,
-  flat,
+  showScope,
   selected,
   trashView,
   onSelect,
@@ -103,16 +110,16 @@ function NoteRow({
 }: {
   note: ListedNote;
   query: string;
-  flat: boolean;
+  /** Flat results name their scope; sectioned rows inherit it from the header. */
+  showScope: boolean;
   selected: boolean;
   trashView: boolean;
   onSelect: (id: string) => void;
   onRestore?: (id: string) => void;
   onPurge?: (id: string) => void;
 }) {
-  const kindIcon = KIND_ICON[note.kind];
+  const scope = noteScope(note);
   const snippet = note.matchSnippet ?? snippetFromBody(note.body);
-  const context = contextLabel(note, flat);
   const title = displayTitle(note);
   return (
     // A div with button semantics, not a <button>: trash rows nest real
@@ -121,6 +128,7 @@ function NoteRow({
     <div
       role="button"
       tabIndex={0}
+      data-scope={scope.kind}
       onClick={() => onSelect(note.id)}
       onKeyDown={(event) => {
         // Only keys aimed at the row itself: the trash rows nest real
@@ -133,27 +141,16 @@ function NoteRow({
       }}
       aria-current={selected ? "true" : undefined}
       className={cn(
-        "group flex w-full cursor-pointer flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left transition-colors",
+        "bb-fn-row group flex w-full cursor-pointer flex-col gap-0.5 rounded-r-lg py-1.5 pl-2 pr-2.5 text-left transition-colors",
         selected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
       )}
     >
       <span className="flex min-w-0 items-center gap-1.5">
-        {kindIcon !== undefined ? (
-          <Icon
-            name={kindIcon}
-            className="size-3.5 shrink-0 text-muted-foreground"
-            aria-hidden
-          />
-        ) : note.color !== null ? (
-          <span
-            className={cn(
-              "size-2 shrink-0 rounded-full",
-              `bb-fn-tint-${note.color}`,
-            )}
-            style={{ background: "var(--bb-fn-dot)" }}
-            aria-hidden
-          />
-        ) : null}
+        <Icon
+          name={SCOPE_ICON[scope.kind]}
+          className={cn("size-3.5 shrink-0", SCOPE_CLASS[scope.kind])}
+          aria-hidden
+        />
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
           {query.length > 0 && note.matchSnippet === null ? (
             <QueryRuns text={title} query={query} />
@@ -161,6 +158,13 @@ function NoteRow({
             title
           )}
         </span>
+        {note.color !== null ? (
+          <span
+            className={cn("size-2 shrink-0 rounded-full", `bb-fn-tint-${note.color}`)}
+            style={{ background: "var(--bb-fn-dot)" }}
+            aria-label="Note color"
+          />
+        ) : null}
         <ProgressRing done={note.taskDone} total={note.taskTotal} />
         {note.pinned ? (
           <Icon name="Pin" className="size-3 shrink-0 text-muted-foreground" aria-label="Pinned" />
@@ -169,12 +173,12 @@ function NoteRow({
           <Icon
             name="ArrowUpRight"
             className="size-3 shrink-0 text-muted-foreground"
-            aria-label="Open as sticky"
+            aria-label="Open as a sticky"
           />
         ) : null}
       </span>
-      {snippet.length > 0 || context !== null ? (
-        <span className="line-clamp-2 text-xs leading-snug text-muted-foreground">
+      {snippet.length > 0 || showScope ? (
+        <span className="line-clamp-2 pl-5 text-xs leading-snug text-muted-foreground">
           {note.matchSnippet !== null ? (
             <MatchSnippet snippet={snippet} />
           ) : query.length > 0 && snippet.length > 0 ? (
@@ -182,16 +186,16 @@ function NoteRow({
           ) : (
             snippet
           )}
-          {context !== null ? (
-            <span className="text-muted-foreground/70 italic">
+          {showScope ? (
+            <span className={cn("italic", SCOPE_CLASS[scope.kind], "opacity-80")}>
               {snippet.length > 0 ? " · " : ""}
-              {context}
+              {scope.label}
             </span>
           ) : null}
         </span>
       ) : null}
       {trashView ? (
-        <span className="mt-1 flex gap-1">
+        <span className="mt-1 flex gap-1 pl-5">
           <Button
             variant="outline"
             size="sm"
@@ -220,41 +224,71 @@ function NoteRow({
   );
 }
 
-function SectionHeader({ label }: { label: string }) {
+function SectionHeader({
+  label,
+  kind,
+  count,
+}: {
+  label: string;
+  kind: ScopeKind;
+  count: number;
+}) {
   return (
-    <div className="px-2.5 pb-0.5 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
-      {label}
+    <div className="bb-fn-section">
+      <Icon
+        name={SCOPE_ICON[kind]}
+        className={cn("size-3", SCOPE_CLASS[kind])}
+        aria-hidden
+      />
+      <span className="min-w-0 truncate">{label}</span>
+      <span className="bb-fn-section-count">{count}</span>
     </div>
   );
 }
 
-/** Inbox / Today: labeled destinations, not mystery icons. */
-function SmartRow({
-  icon,
-  label,
-  hint,
-  active,
-  onClick,
+/**
+ * Inbox and Today: the two destinations that always exist, as a pair of
+ * pills above the list. They are shortcuts, not rows — the inbox note is
+ * deliberately kept out of the sections below so it never appears twice.
+ */
+function QuickRow({
+  inboxActive,
+  todayActive,
+  onOpenInbox,
+  onOpenDaily,
 }: {
-  icon: IconName;
-  label: string;
-  hint: string;
-  active: boolean;
-  onClick: () => void;
+  inboxActive: boolean;
+  todayActive: boolean;
+  onOpenInbox: () => void;
+  onOpenDaily: () => void;
 }) {
-  return (
+  const pill = (
+    icon: IconName,
+    label: string,
+    hint: string,
+    active: boolean,
+    onClick: () => void,
+  ) => (
     <button
       type="button"
       onClick={onClick}
       title={hint}
       className={cn(
-        "flex w-full items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors",
-        active ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+        "flex flex-1 items-center justify-center gap-1.5 rounded-md border py-1 text-xs font-medium transition-colors",
+        active
+          ? "border-transparent bg-accent text-accent-foreground"
+          : "border-border text-muted-foreground hover:bg-accent/50 hover:text-foreground",
       )}
     >
-      <Icon name={icon} className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-      <span className="flex-1 font-medium">{label}</span>
+      <Icon name={icon} className="size-3.5 shrink-0" aria-hidden />
+      {label}
     </button>
+  );
+  return (
+    <div className="flex shrink-0 gap-1.5 px-2 pb-2">
+      {pill("Archive", "Inbox", "Everything quick capture collects", inboxActive, onOpenInbox)}
+      {pill("Calendar", "Today", "Today's daily note", todayActive, onOpenDaily)}
+    </div>
   );
 }
 
@@ -266,6 +300,8 @@ export interface NoteListProps {
   onQueryChange: (query: string) => void;
   activeTag: string | null;
   onTagChange: (tag: string | null) => void;
+  scopeFilter: ScopeFilter;
+  onScopeFilterChange: (filter: ScopeFilter) => void;
   view: "active" | "trash";
   onViewChange: (view: "active" | "trash") => void;
   selectedId: string | null;
@@ -289,6 +325,8 @@ export function NoteList({
   onQueryChange,
   activeTag,
   onTagChange,
+  scopeFilter,
+  onScopeFilterChange,
   view,
   onViewChange,
   selectedId,
@@ -304,29 +342,58 @@ export function NoteList({
 }: NoteListProps) {
   const trashView = view === "trash";
   const topTags = tags.slice(0, 8);
-  /** Sections only apply to the untouched active list; anything filtered is flat. */
-  const sectioned =
-    !trashView && query.trim().length === 0 && activeTag === null;
+  const searching = query.trim().length > 0 || activeTag !== null;
 
-  const groups = useMemo(() => {
-    if (!sectioned) return null;
-    const pinned = notes.filter((note) => note.pinned);
-    const rest = notes.filter((note) => !note.pinned);
-    return {
-      pinned,
-      inbox: rest.find((note) => note.kind === "inbox") ?? null,
-      plain: rest.filter((note) => note.kind === "note"),
-      scratchpads: rest.filter((note) => note.kind === "scratchpad"),
-      daily: rest.filter((note) => note.kind === "daily"),
-    };
-  }, [sectioned, notes]);
+  const visible = useMemo(
+    () =>
+      scopeFilter.kind === "all"
+        ? notes
+        : notes.filter((note) => matchesScopeFilter(note, scopeFilter)),
+    [notes, scopeFilter],
+  );
 
-  const rowProps = {
-    query,
-    trashView,
-    onSelect,
-    onRestore,
-    onPurge,
+  /**
+   * Sections only make sense for the unfiltered list; results stay flat.
+   * The inbox note is excluded: its pill above is always visible, and a
+   * one-row "INBOX" section under it was the same note listed twice.
+   */
+  const grouped = useMemo(
+    () =>
+      trashView || searching
+        ? null
+        : groupNotesByScope(visible.filter((note) => note.kind !== "inbox")),
+    [trashView, searching, visible],
+  );
+
+  const projects = useMemo(() => projectsInNotes(notes), [notes]);
+  const inboxNote = useMemo(
+    () => notes.find((note) => note.kind === "inbox"),
+    [notes],
+  );
+  const todayNote = useMemo(() => {
+    const today = localDateKey(new Date());
+    return notes.find((note) => note.kind === "daily" && note.dateKey === today);
+  }, [notes]);
+  const showScopeFilter = !trashView && (projects.length > 0 || notes.length > 6);
+
+  const rowProps = { query, trashView, onSelect, onRestore, onPurge };
+
+  const chip = (label: string, filter: ScopeFilter, key: string) => {
+    const active =
+      filter.kind === scopeFilter.kind &&
+      (filter.kind !== "project" ||
+        (scopeFilter.kind === "project" && scopeFilter.name === filter.name));
+    return (
+      <button
+        key={key}
+        type="button"
+        className="bb-fn-chip"
+        data-active={active ? "true" : "false"}
+        onClick={() => onScopeFilterChange(active ? { kind: "all" } : filter)}
+      >
+        {label}
+      </button>
+    );
   };
 
   return (
@@ -360,6 +427,17 @@ export function NoteList({
         ) : null}
       </div>
 
+      {showScopeFilter ? (
+        <div className="bb-fn-scope-filter">
+          {chip("All", { kind: "all" }, "all")}
+          {chip("Global", { kind: "global" }, "global")}
+          {projects.map((name) =>
+            chip(name, { kind: "project", name }, `project:${name}`),
+          )}
+          {chip("Threads", { kind: "threads" }, "threads")}
+        </div>
+      ) : null}
+
       {!trashView && topTags.length > 0 ? (
         <div className="flex shrink-0 flex-wrap gap-1 px-2 pb-1.5">
           {topTags.map((tag) => (
@@ -367,12 +445,8 @@ export function NoteList({
               key={tag.name}
               type="button"
               onClick={() => onTagChange(activeTag === tag.name ? null : tag.name)}
-              className={cn(
-                "rounded-full border px-2 py-0.5 text-[11px] leading-4 transition-colors",
-                activeTag === tag.name
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border text-muted-foreground hover:bg-accent",
-              )}
+              className="bb-fn-chip"
+              data-active={activeTag === tag.name ? "true" : "false"}
             >
               #{tag.name}
             </button>
@@ -380,100 +454,75 @@ export function NoteList({
         </div>
       ) : null}
 
+      {!trashView ? (
+        <QuickRow
+          inboxActive={inboxNote !== undefined && inboxNote.id === selectedId}
+          todayActive={todayNote !== undefined && todayNote.id === selectedId}
+          onOpenInbox={onOpenInbox}
+          onOpenDaily={onOpenDaily}
+        />
+      ) : null}
+
       <div className="bb-fn-quiet-scroll min-h-0 flex-1 overflow-y-auto px-1.5 pb-1.5">
-        {groups !== null ? (
+        {grouped !== null ? (
           <>
-            <SmartRow
-              icon="Archive"
-              label="Inbox"
-              hint="Everything quick capture collects"
-              active={groups.inbox !== null && groups.inbox.id === selectedId}
-              onClick={onOpenInbox}
-            />
-            <SmartRow
-              icon="Calendar"
-              label="Today"
-              hint="Today's daily note"
-              active={false}
-              onClick={onOpenDaily}
-            />
-            {groups.pinned.length > 0 ? (
+            {grouped.pinned.length > 0 ? (
               <>
-                <SectionHeader label="Pinned" />
-                {groups.pinned.map((note) => (
+                <SectionHeader label="Pinned" kind="global" count={grouped.pinned.length} />
+                {grouped.pinned.map((note) => (
                   <NoteRow
                     key={note.id}
                     note={note}
-                    flat={false}
+                    showScope
                     selected={note.id === selectedId}
                     {...rowProps}
                   />
                 ))}
               </>
             ) : null}
-            {groups.plain.length > 0 ? (
-              <>
-                <SectionHeader label="Notes" />
-                {groups.plain.map((note) => (
+            {grouped.sections.map((section) => (
+              <div key={section.key}>
+                <SectionHeader
+                  label={section.label}
+                  kind={section.kind}
+                  count={section.notes.length}
+                />
+                {section.notes.map((note) => (
                   <NoteRow
                     key={note.id}
                     note={note}
-                    flat={false}
+                    showScope={section.kind === "thread"}
                     selected={note.id === selectedId}
                     {...rowProps}
                   />
                 ))}
-              </>
-            ) : null}
-            {groups.scratchpads.length > 0 ? (
-              <>
-                <SectionHeader label="Thread scratchpads" />
-                {groups.scratchpads.map((note) => (
-                  <NoteRow
-                    key={note.id}
-                    note={note}
-                    flat={false}
-                    selected={note.id === selectedId}
-                    {...rowProps}
-                  />
-                ))}
-              </>
-            ) : null}
-            {groups.daily.length > 0 ? (
-              <>
-                <SectionHeader label="Daily notes" />
-                {groups.daily.map((note) => (
-                  <NoteRow
-                    key={note.id}
-                    note={note}
-                    flat={false}
-                    selected={note.id === selectedId}
-                    {...rowProps}
-                  />
-                ))}
-              </>
-            ) : null}
-            {notes.length === 0 ? (
-              <div className="flex flex-col items-center gap-1 px-4 py-8 text-center">
-                <p className="text-sm text-muted-foreground">No notes yet.</p>
+              </div>
+            ))}
+            {visible.length === 0 ? (
+              <div className="flex flex-col items-center gap-1 px-4 py-10 text-center">
+                <p className="text-sm text-muted-foreground">
+                  {scopeFilter.kind === "all"
+                    ? "No notes yet."
+                    : "Nothing in this scope."}
+                </p>
                 <p className="text-xs text-muted-foreground/70">
                   ⌘N starts one · Ctrl+&apos; toggles this window
                 </p>
               </div>
             ) : null}
           </>
-        ) : notes.length === 0 ? (
+        ) : visible.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-1 px-4 text-center">
             <p className="text-sm text-muted-foreground">
               {trashView ? "Trash is empty." : "No matching notes."}
             </p>
           </div>
         ) : (
-          notes.map((note) => (
+          visible.map((note) => (
             <NoteRow
               key={note.id}
               note={note}
-              flat
+              showScope
               selected={note.id === selectedId}
               {...rowProps}
             />

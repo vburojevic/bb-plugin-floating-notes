@@ -391,6 +391,7 @@ export default async function plugin(bb: BbPluginApi) {
       ...rowToNote(row),
       matchSnippet: row.match_snippet ?? null,
       threadTitle: null as string | null,
+      projectName: null as string | null,
     }));
     if (filter.tag !== undefined) {
       const tag = filter.tag.toLowerCase();
@@ -406,28 +407,58 @@ export default async function plugin(bb: BbPluginApi) {
   // Titles resolve through bb.sdk.threads.get behind a short cache.
 
   const THREAD_TITLE_TTL_MS = 60_000;
+  const PROJECT_TTL_MS = 5 * 60_000;
   const threadTitleCache = new Map<string, { title: string | null; at: number }>();
+  /** id -> name for every project, refreshed as one list call. */
+  let projectNameCache = new Map<string, string>();
+  let projectsFetchedAt = 0;
 
   const boundThreadId = (note: ListedNote): string | null =>
     note.kind === "scratchpad"
       ? note.originThreadId
       : (note.pinnedThreadId ?? note.originThreadId);
 
-  const withThreadTitles = async (
-    notes: ListedNote[],
-  ): Promise<ListedNote[]> => {
+  /** A note belongs to the project it was pinned to, else the one it came from. */
+  const boundProjectId = (note: ListedNote): string | null =>
+    note.pinnedProjectId ?? note.originProjectId;
+
+  const refreshProjects = async (now: number): Promise<void> => {
+    if (now - projectsFetchedAt < PROJECT_TTL_MS) return;
+    try {
+      const projects = await bb.sdk.projects.list();
+      const next = new Map<string, string>();
+      for (const project of projects) next.set(project.id, project.name);
+      projectNameCache = next;
+      projectsFetchedAt = now;
+    } catch {
+      // Keep the previous map; a stale name beats no name, and the next
+      // list call retries.
+      projectsFetchedAt = now;
+    }
+  };
+
+  /**
+   * Stamp every row with where it lives: the bound thread's title and the
+   * owning project's name. Both are what the UI groups and labels by, so
+   * they are resolved once here rather than guessed per surface.
+   */
+  const withScope = async (notes: ListedNote[]): Promise<ListedNote[]> => {
     const now = Date.now();
     const wanted = new Set<string>();
+    let needsProjects = false;
     for (const note of notes) {
       const threadId = boundThreadId(note);
-      if (threadId === null) continue;
-      const cached = threadTitleCache.get(threadId);
-      if (cached === undefined || now - cached.at > THREAD_TITLE_TTL_MS) {
-        wanted.add(threadId);
+      if (threadId !== null) {
+        const cached = threadTitleCache.get(threadId);
+        if (cached === undefined || now - cached.at > THREAD_TITLE_TTL_MS) {
+          wanted.add(threadId);
+        }
       }
+      if (boundProjectId(note) !== null) needsProjects = true;
     }
-    await Promise.all(
-      [...wanted].map(async (threadId) => {
+    await Promise.all([
+      needsProjects ? refreshProjects(now) : Promise.resolve(),
+      ...[...wanted].map(async (threadId) => {
         try {
           const thread = await bb.sdk.threads.get({ threadId });
           threadTitleCache.set(threadId, { title: thread.title ?? null, at: now });
@@ -436,13 +467,18 @@ export default async function plugin(bb: BbPluginApi) {
           threadTitleCache.set(threadId, { title: null, at: now });
         }
       }),
-    );
+    ]);
     return notes.map((note) => {
       const threadId = boundThreadId(note);
-      if (threadId === null) return note;
+      const projectId = boundProjectId(note);
       return {
         ...note,
-        threadTitle: threadTitleCache.get(threadId)?.title ?? null,
+        threadTitle:
+          threadId === null
+            ? null
+            : (threadTitleCache.get(threadId)?.title ?? null),
+        projectName:
+          projectId === null ? null : (projectNameCache.get(projectId) ?? null),
       };
     });
   };
@@ -949,7 +985,7 @@ export default async function plugin(bb: BbPluginApi) {
 
   bb.rpc.register(rpcContract, {
     listNotes: async (input) => ({
-      notes: await withThreadTitles(listNotes(input)),
+      notes: await withScope(listNotes(input)),
       tags: tagCounts(),
       counts: noteCounts(),
     }),

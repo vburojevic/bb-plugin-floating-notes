@@ -98,6 +98,7 @@ function upsert(note: Note): void {
     ...note,
     matchSnippet: null,
     threadTitle: index === -1 ? null : state.notes[index]!.threadTitle,
+    projectName: index === -1 ? null : state.notes[index]!.projectName,
   };
   const next =
     index === -1

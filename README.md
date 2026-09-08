@@ -15,6 +15,11 @@ with `Ctrl+Shift+'`.
   the other one). Note list with FTS5 search-as-you-type, tag chips, and
   trash; live-markdown editor on the right; `⌘K` command palette over both.
   On a phone it becomes a sheet that stays above the software keyboard.
+- **Scope you can see.** Every note belongs somewhere, and the list says
+  where: one section per project (by name), then global notes, thread
+  scratchpads and daily notes — each with its own glyph and a tinted left
+  edge that the note's sticky card wears too. Filter chips across the top
+  narrow to a single project, to global notes, or to threads.
 - **Stickies.** Pop any note out into its own small card. Six theme-aware
   colors, double-click the bar to collapse it, drag it anywhere. **Pin a
   sticky to a thread** and it only shows while that thread is on screen —
@@ -80,6 +85,7 @@ server.ts                        SQLite (WAL) + FTS5, RPC, mentions, CLI, tools
 lib/store.ts                     one client cache for every surface
 lib/controller.ts                open state, visible threads, picker plumbing
 lib/frame.ts                     drag/resize/clamp/persist for N windows
+lib/scope.ts                     where a note lives: grouping + filtering
 lib/editor/                      CodeMirror 6 live-markdown editor (self-contained)
 components/floating-notes.tsx    the content-script root
 components/notes-window.tsx      the main window
@@ -98,6 +104,12 @@ terminal, still true here):
   structural changes and on focus. Server mutations run through a mutex.
 - **Theme-aware color is `light-dark()` or bb tokens only** — the plugin's
   Tailwind build has no `.dark` variant wired to bb's theme.
+- **Never size a floating pane with a Tailwind width utility.** In the
+  content-script context bb's app CSS wins the cascade for `width`, so
+  `w-60` (and even `w-[240px]`) silently compute to the container width —
+  which once pushed the whole editor off-screen. Pane widths live in
+  `styles.css` under `.bb-fn-*` classes, which always apply. The same is
+  true of `z-index` at portal boundaries, where inline styles are used.
 
 ## Development
 

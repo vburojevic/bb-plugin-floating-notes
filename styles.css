@@ -358,3 +358,190 @@
 .bb-fn-sticky.bb-fn-ghost:not(:hover) .bb-fn-sticky-body {
   pointer-events: none;
 }
+
+/* =========================================================== pane layout ===
+ *
+ * THE fix for "I can't open notes from the floating window": Tailwind width
+ * utilities do not resolve for the content-script root (measured: `w-60` and
+ * even `w-[240px]` both compute to the full container width, while
+ * `shrink-0` applies fine — bb's app CSS wins the cascade for `width` at this
+ * boundary). The list therefore sized to its content — 991px inside an 840px
+ * window — and pushed the editor pane off-screen, so clicking a note loaded
+ * an editor nobody could see. Authored rules under our own class always win,
+ * so every pane width lives here rather than in a utility class.
+ */
+.bb-fn-list-pane {
+  width: 264px;
+  flex: 0 0 264px;
+  min-width: 0;
+}
+
+.bb-fn-window[data-layout="sheet"] .bb-fn-list-pane {
+  width: 100%;
+  flex: 1 1 auto;
+}
+
+/* The editor pane must be allowed to shrink, or a long unbroken line in a
+   note re-inflates the row and pushes it out of the window all over again. */
+.bb-fn-editor-pane {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Wider list in the nav panel, which owns a whole route. */
+.bb-fn-panel .bb-fn-list-pane {
+  width: 300px;
+  flex: 0 0 300px;
+}
+
+/* ============================================================ note scope ===
+ *
+ * Scope is the answer to "where does this note live" — global, a project, a
+ * thread, or one of the singletons. It reads as a tinted left edge plus a
+ * glyph, so the user's own sticky color stays free to mean whatever they want.
+ */
+.bb-fn-row {
+  position: relative;
+  border-left: 2px solid transparent;
+}
+
+.bb-fn-row[data-scope="project"] {
+  border-left-color: light-dark(oklch(0.62 0.16 285 / 0.55), oklch(0.7 0.14 285 / 0.6));
+}
+
+.bb-fn-row[data-scope="thread"],
+.bb-fn-row[data-scope="scratchpad"] {
+  border-left-color: light-dark(oklch(0.62 0.13 220 / 0.55), oklch(0.72 0.12 220 / 0.6));
+}
+
+.bb-fn-row[data-scope="daily"] {
+  border-left-color: light-dark(oklch(0.72 0.14 70 / 0.6), oklch(0.78 0.12 70 / 0.6));
+}
+
+.bb-fn-row[data-scope="inbox"] {
+  border-left-color: light-dark(oklch(0.64 0.14 155 / 0.55), oklch(0.74 0.12 155 / 0.6));
+}
+
+.bb-fn-row[data-scope="global"] {
+  border-left-color: var(--border);
+}
+
+/* The scope glyph inherits the same hue as the edge it belongs to. */
+.bb-fn-scope-project { color: light-dark(oklch(0.55 0.16 285), oklch(0.76 0.13 285)); }
+.bb-fn-scope-thread { color: light-dark(oklch(0.55 0.13 220), oklch(0.76 0.12 220)); }
+.bb-fn-scope-daily { color: light-dark(oklch(0.6 0.14 70), oklch(0.8 0.12 70)); }
+.bb-fn-scope-inbox { color: light-dark(oklch(0.55 0.14 155), oklch(0.76 0.12 155)); }
+.bb-fn-scope-global { color: var(--muted-foreground); }
+
+/* Section headers carry the same hue as the rows they introduce. */
+.bb-fn-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.bb-fn-section-count {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.65;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Scope filter chips under the search field. */
+.bb-fn-scope-filter {
+  display: flex;
+  gap: 4px;
+  padding: 0 8px 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* The row scrolls; fade the trailing edge so a clipped chip reads as
+     "there is more" rather than as a rendering mistake. */
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+
+.bb-fn-scope-filter::-webkit-scrollbar { display: none; }
+
+.bb-fn-chip {
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--muted-foreground);
+  background: transparent;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bb-fn-chip:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.bb-fn-chip[data-active="true"] {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+/* ===================================================== sticky title bar ===
+ *
+ * Every control stays on screen. They were hover-only, which hid half the bar
+ * at rest and made them unreachable on a touch screen — there is no hover on
+ * a finger. Dimmed is enough of a hint that they are chrome, not content.
+ */
+.bb-fn-bar-button {
+  opacity: 0.55;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+
+.bb-fn-sticky-bar:hover .bb-fn-bar-button,
+.bb-fn-bar-button:hover,
+.bb-fn-bar-button:focus-visible {
+  opacity: 1;
+}
+
+/* A finger has no hover state to reveal anything with. */
+@media (pointer: coarse) {
+  .bb-fn-bar-button {
+    opacity: 0.9;
+  }
+}
+
+/* Pinned is a state, not a hint: it stays at full strength always. */
+.bb-fn-bar-button.text-primary {
+  opacity: 1;
+}
+
+/* A sticky wears the same scope edge as its row in the list, so a card on
+   screen and its row in the window read as the same object. */
+.bb-fn-sticky {
+  border-left-width: 3px;
+}
+
+.bb-fn-sticky[data-scope="project"] {
+  border-left-color: light-dark(oklch(0.62 0.16 285 / 0.75), oklch(0.7 0.14 285 / 0.8));
+}
+
+.bb-fn-sticky[data-scope="thread"],
+.bb-fn-sticky[data-scope="scratchpad"] {
+  border-left-color: light-dark(oklch(0.62 0.13 220 / 0.75), oklch(0.72 0.12 220 / 0.8));
+}
+
+.bb-fn-sticky[data-scope="daily"] {
+  border-left-color: light-dark(oklch(0.72 0.14 70 / 0.8), oklch(0.78 0.12 70 / 0.8));
+}
+
+.bb-fn-sticky[data-scope="inbox"] {
+  border-left-color: light-dark(oklch(0.64 0.14 155 / 0.75), oklch(0.74 0.12 155 / 0.8));
+}
