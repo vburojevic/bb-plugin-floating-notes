@@ -462,11 +462,7 @@ export function NotesWindow() {
                   <Button variant="ghost" size="icon" className="size-6" aria-label="Color">
                     {selected.color !== null ? (
                       <span
-                        className={cn(
-                          "size-3 rounded-full border border-foreground/20",
-                          `bb-fn-tint-${selected.color}`,
-                        )}
-                        style={{ background: "var(--bb-fn-dot)" }}
+                        className={cn("bb-fn-swatch", `bb-fn-tint-${selected.color}`)}
                         aria-label="Note color"
                       />
                     ) : (
@@ -482,11 +478,7 @@ export function NotesWindow() {
                       key={color}
                       onSelect={() => void notesStore.updateNote({ id: selected.id, color })}
                     >
-                      <span
-                        className={cn("size-2.5 rounded-full", `bb-fn-tint-${color}`)}
-                        style={{ background: "var(--bb-fn-dot)" }}
-                        aria-hidden
-                      />
+                      <span className={cn("bb-fn-swatch", `bb-fn-tint-${color}`)} aria-hidden />
                       {COLOR_LABEL[color]}
                       {selected.color === color ? (
                         <Icon name="Check" className="ml-auto size-3.5" aria-hidden />

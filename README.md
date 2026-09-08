@@ -104,12 +104,15 @@ terminal, still true here):
   structural changes and on focus. Server mutations run through a mutex.
 - **Theme-aware color is `light-dark()` or bb tokens only** — the plugin's
   Tailwind build has no `.dark` variant wired to bb's theme.
-- **Never size a floating pane with a Tailwind width utility.** In the
-  content-script context bb's app CSS wins the cascade for `width`, so
-  `w-60` (and even `w-[240px]`) silently compute to the container width —
-  which once pushed the whole editor off-screen. Pane widths live in
-  `styles.css` under `.bb-fn-*` classes, which always apply. The same is
-  true of `z-index` at portal boundaries, where inline styles are used.
+- **Do not trust a Tailwind utility bb does not use itself.** Our utilities
+  compile into `@layer utilities`, and layered CSS loses to bb's unlayered
+  app CSS — so a class bb also uses (`size-2`, `size-5`) works, while one it
+  never emits is silently dropped. `w-60` computed to the container width and
+  pushed the editor off-screen; `size-2.5` collapsed a colour swatch to a 2px
+  speck of border. Anything load-bearing — pane widths, swatches, z-index at
+  portal boundaries — lives in `styles.css` under an unlayered `.bb-fn-*`
+  class (or an inline style), which always wins. When in doubt, measure the
+  computed value in the running app rather than trusting the class name.
 
 ## Development
 

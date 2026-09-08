@@ -160,8 +160,7 @@ function NoteRow({
         </span>
         {note.color !== null ? (
           <span
-            className={cn("size-2 shrink-0 rounded-full", `bb-fn-tint-${note.color}`)}
-            style={{ background: "var(--bb-fn-dot)" }}
+            className={cn("bb-fn-swatch bb-fn-swatch-sm", `bb-fn-tint-${note.color}`)}
             aria-label="Note color"
           />
         ) : null}

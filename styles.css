@@ -545,3 +545,35 @@
 .bb-fn-sticky[data-scope="inbox"] {
   border-left-color: light-dark(oklch(0.64 0.14 155 / 0.75), oklch(0.74 0.12 155 / 0.8));
 }
+
+/* ======================================================= colour swatches ===
+ *
+ * Never size a swatch with a utility class. Our Tailwind utilities compile
+ * into `@layer utilities`, and layered CSS loses to bb's unlayered app CSS —
+ * so a utility bb itself never uses (`size-2.5` was the one that bit us) is
+ * simply dropped, and the swatch collapsed to a 2px speck of border with an
+ * invisible 0x0 content box. These rules are unlayered, so they always win.
+ */
+.bb-fn-swatch {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--foreground) 30%, transparent);
+  background: var(--bb-fn-dot, transparent);
+}
+
+/* The row swatch is smaller: it sits beside text, not inside a control. */
+.bb-fn-swatch-sm {
+  width: 8px;
+  height: 8px;
+}
+
+/* No colour chosen yet — an empty ring reads as a rendering fault, so the
+   trigger shows a palette glyph instead and only becomes a swatch once the
+   note actually has a colour. */
+.bb-fn-swatch-empty {
+  border-style: dashed;
+  background: transparent;
+}

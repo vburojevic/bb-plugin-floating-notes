@@ -159,17 +159,15 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
             <button
               type="button"
               data-no-drag=""
-              title="Color"
-              className="flex size-4 shrink-0 items-center justify-center"
+              title={note.color === null ? "Set a colour" : "Change colour"}
+              aria-label="Sticky color"
+              className="bb-fn-bar-button flex size-5 shrink-0 items-center justify-center rounded transition-colors hover:bg-foreground/10"
             >
-              <span
-                className="size-2.5 rounded-full border border-foreground/20"
-                style={{
-                  background:
-                    note.color !== null ? "var(--bb-fn-dot)" : "transparent",
-                }}
-                aria-label="Sticky color"
-              />
+              {note.color === null ? (
+                <Icon name="Palette" className="size-3.5" aria-hidden />
+              ) : (
+                <span className={cn("bb-fn-swatch", `bb-fn-tint-${note.color}`)} aria-hidden />
+              )}
             </button>
           </DropdownMenuTrigger>
           {/* z-[68]: the vendored menu portals to body at z-50, underneath
@@ -180,11 +178,7 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
                 key={color}
                 onSelect={() => void notesStore.updateNote({ id: note.id, color })}
               >
-                <span
-                  className={cn("size-2.5 rounded-full", `bb-fn-tint-${color}`)}
-                  style={{ background: "var(--bb-fn-dot)" }}
-                  aria-hidden
-                />
+                <span className={cn("bb-fn-swatch", `bb-fn-tint-${color}`)} aria-hidden />
                 {COLOR_LABEL[color]}
                 {note.color === color ? (
                   <Icon name="Check" className="ml-auto size-3.5" aria-hidden />
