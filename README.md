@@ -1,6 +1,6 @@
 <div align="center">
 
-# Notes
+# Floating Notes
 
 **Sticky notes that float over your agents.**
 
@@ -16,12 +16,12 @@ that behaves like one.
 
 ## Install
 
-From the bb plugin catalog — open **Extensions**, search for **Notes**, install.
+From the bb plugin catalog — open **Extensions**, search for **Floating Notes**, install.
 
 Or from a shell:
 
 ```sh
-bb plugin install git:https://github.com/vburojevic/bb-plugin-notes
+bb plugin install git:https://github.com/vburojevic/bb-plugin-floating-notes
 ```
 
 Requires bb 0.42 or newer. No account, no API key, nothing leaves your machine:
