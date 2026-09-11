@@ -195,6 +195,16 @@ describe("extractHashtags", () => {
   it("requires a leading letter and at least two characters", () => {
     expect(extractHashtags("#a #_x #9lives #ok")).toEqual(["ok"]);
   });
+  it("ignores hex colours that happen to start with a letter", () => {
+    expect(extractHashtags("| surface | #ffffff | #f6f7f9 | #fff | #f00 | #deadbeef |")).toEqual([]);
+  });
+  it("keeps short words made of hex letters", () => {
+    expect(extractHashtags("#cafe #add #face")).toEqual(["add", "cafe", "face"]);
+  });
+  it("ignores hashtags inside inline code and fenced code", () => {
+    const body = "use `#nope` here\n```css\n#main { color: #fff }\n```\n#yes";
+    expect(extractHashtags(body)).toEqual(["yes"]);
+  });
 });
 
 describe("referencedAttachmentIds", () => {

@@ -101,15 +101,38 @@ export function ftsQuery(raw: string): string {
     .join(" ");
 }
 
+/** Fenced code blocks and inline code spans are never a source of tags. */
+function stripCode(body: string): string {
+  return body
+    .replace(/^(```|~~~)[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, "")
+    .replace(/`[^`\n]*`/g, "");
+}
+
+/**
+ * `#fff`, `#f00`, `#ffffff`, `#deadbeef` are colours. Six- and eight-digit hex
+ * tokens always are; three- and four-digit ones only when they hold a digit or
+ * repeat one character, so real words such as `#cafe` and `#add` stay tags.
+ */
+function looksLikeHexColor(token: string): boolean {
+  if (!/^[0-9a-f]+$/i.test(token)) return false;
+  if (token.length === 6 || token.length === 8) return true;
+  if (token.length === 3 || token.length === 4) {
+    return /\d/.test(token) || new Set(token.toLowerCase()).size === 1;
+  }
+  return false;
+}
+
 /**
  * Inline #hashtags in a body. Requires a letter right after the `#`, so
- * markdown headings (`# Title` — space follows), issue refs (`#123`), and hex
- * colors never match. Tags are 2–32 chars of [a-z0-9_-], lowercased.
+ * markdown headings (`# Title` — space follows) and issue refs (`#123`) never
+ * match; hex colours and anything inside code are excluded too. Tags are
+ * 2–32 chars of [a-z0-9_-], lowercased.
  */
 export function extractHashtags(body: string): string[] {
   const tags = new Set<string>();
-  for (const match of body.matchAll(/(?:^|[\s(])#([a-z][a-z0-9_-]{1,31})\b/gim)) {
-    tags.add(match[1]!.toLowerCase());
+  for (const match of stripCode(body).matchAll(/(?:^|[\s(])#([a-z][a-z0-9_-]{1,31})\b/gim)) {
+    const tag = match[1]!.toLowerCase();
+    if (!looksLikeHexColor(tag)) tags.add(tag);
   }
   return [...tags].sort();
 }

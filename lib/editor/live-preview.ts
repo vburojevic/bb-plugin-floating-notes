@@ -188,14 +188,21 @@ function buildDecorations(view: EditorView, images: ImageCache): DecorationSet {
   const { doc } = state;
   const config = state.facet(livePreviewConfig);
 
-  // Lines touched by any selection cursor keep their raw markdown visible.
+  // Lines touched by a selection cursor keep their raw markdown visible — but
+  // only while this editor has the caret. An unfocused editor still carries a
+  // selection (position 0 by default), which used to reveal the `#` on the
+  // first line of every note nobody was typing in.
+  const focused = view.hasFocus;
   const activeLines = new Set<number>();
-  for (const range of state.selection.ranges) {
-    const first = doc.lineAt(range.from).number;
-    const last = doc.lineAt(range.to).number;
-    for (let n = first; n <= last; n++) activeLines.add(n);
+  if (focused) {
+    for (const range of state.selection.ranges) {
+      const first = doc.lineAt(range.from).number;
+      const last = doc.lineAt(range.to).number;
+      for (let n = first; n <= last; n++) activeLines.add(n);
+    }
   }
-  const lineIsActive = (pos: number): boolean => activeLines.has(doc.lineAt(pos).number);
+  const lineIsActive = (pos: number): boolean =>
+    focused && activeLines.has(doc.lineAt(pos).number);
 
   const decorations: Range<Decoration>[] = [];
   // line start offset → classes; deduped so nested nodes don't double-apply.
@@ -476,6 +483,9 @@ const livePreviewPlugin = ViewPlugin.fromClass(
         update.docChanged ||
         update.selectionSet ||
         update.viewportChanged ||
+        // Focus decides whether marks show at all, so a focus change has to
+        // rebuild them.
+        update.focusChanged ||
         syntaxTree(update.state) !== syntaxTree(update.startState)
       ) {
         this.decorations = buildDecorations(update.view, this.images);

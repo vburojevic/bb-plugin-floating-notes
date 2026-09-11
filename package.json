@@ -1,13 +1,29 @@
 {
   "name": "bb-plugin-notes",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "description": "Floating notes for bb: a draggable notes window, stickies pinned to threads or projects, per-thread scratchpads, quick capture, and a live-markdown editor.",
+  "license": "MIT",
+  "author": "Vedran Burojević (https://github.com/vburojevic)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vburojevic/bb-plugin-notes.git"
+  },
+  "homepage": "https://github.com/vburojevic/bb-plugin-notes#readme",
+  "keywords": [
+    "bb",
+    "bb-plugin",
+    "notes",
+    "sticky-notes",
+    "markdown",
+    "scratchpad"
+  ],
   "type": "module",
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "engines": {
-    "bb": ">=0.35",
+    "bb": ">=0.42",
     "bbPluginSdk": "^0.4.1"
   },
   "bb": {
