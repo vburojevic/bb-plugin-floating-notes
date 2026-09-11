@@ -10,7 +10,10 @@ that behaves like one.
 
 </div>
 
-![The Notes window and three stickies floating over a bb thread](docs/media/hero.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/dark/hero.png">
+  <img alt="The Floating Notes window and three stickies over a bb thread" src="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/light/hero.png">
+</picture>
 
 *One window, three stickies, and the thread you are actually working on.*
 
@@ -29,7 +32,10 @@ notes live in a SQLite database inside bb's own data directory.
 
 ## Every note knows where it lives
 
-![The note list grouped into project, global, scratchpad and daily sections](docs/media/scopes.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/dark/scopes.png">
+  <img alt="The note list grouped into project, global, scratchpad and daily sections" src="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/light/scopes.png">
+</picture>
 
 A flat pile of notes stops being useful at about thirty. The list groups by
 **scope** instead: one section per project, by name, then global notes, thread
@@ -43,7 +49,10 @@ threads. Search understands operators too: `tag:api`, `in:scratchpads`,
 
 ## Notes that follow the work
 
-![Three stickies over a thread: one global, one pinned to the project, one pinned to the thread](docs/media/stickies.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/dark/stickies.png">
+  <img alt="Three stickies over a thread: one global, one pinned to a project, one pinned to the thread" src="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/light/stickies.png">
+</picture>
 
 Pop any note out as a sticky. Drag it anywhere, snap it to an edge, collapse it
 to its title bar, or drop it into **reference mode** — translucent and
@@ -57,7 +66,10 @@ agents can append to while they work.
 
 ## A real markdown editor
 
-![The editor showing a code fence with syntax highlighting and a wiki link](docs/media/editor.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/dark/editor.png">
+  <img alt="The editor showing a highlighted code fence and a wiki link" src="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/light/editor.png">
+</picture>
 
 Formatting marks hide as you leave a line. Headings size themselves, checkboxes
 are clickable and roll up into a progress ring on the row, code fences get real
@@ -72,7 +84,10 @@ collected automatically.
 
 ## Capture without leaving the thread
 
-![The quick capture bar over a thread](docs/media/capture.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/dark/capture.png">
+  <img alt="The quick capture bar over a thread" src="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/light/capture.png">
+</picture>
 
 `Ctrl+Shift+'` opens a one-line bar over whatever you are doing. Type, press
 Enter, it is saved and gone. `Tab` switches between your Inbox and the current
@@ -84,7 +99,10 @@ into the draft, and `@note` mentions resolve fresh at send time.
 
 ## On a phone it becomes a sheet
 
-<img src="docs/media/mobile.png" alt="The notes sheet on a phone" width="320">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/dark/mobile.png">
+  <img alt="The notes sheet on a phone" src="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/light/mobile.png" width="320">
+</picture>
 
 Below bb's compact breakpoint the window stops pretending to be a window: it
 fills the viewport minus one even inset, measured from the safe area, and
