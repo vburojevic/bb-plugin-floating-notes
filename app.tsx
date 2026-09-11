@@ -19,7 +19,7 @@ import { NotesNavPanel } from "@/components/nav-panel";
 import { ThreadNotesPanel } from "@/components/thread-panel";
 import { controller } from "@/lib/controller";
 import { useControllerState } from "@/lib/hooks";
-import { notesStore } from "@/lib/store";
+import { notesStore, setPluginId } from "@/lib/store";
 import "./styles.css";
 
 /**
@@ -100,7 +100,9 @@ function ThreadHeaderNotesButton({
 export default definePluginApp((app) => {
   app.contentScripts.register({
     id: "floating-notes",
-    mount({ signal }) {
+    mount({ signal, pluginId }) {
+      // Route every RPC at the id bb actually installed us under.
+      setPluginId(pluginId);
       const container = document.createElement("div");
       document.body.append(container);
       const root = createRoot(container);

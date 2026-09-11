@@ -13,9 +13,33 @@ import {
 } from "./contract";
 import { createRpcClient } from "./rpc";
 
-export const PLUGIN_ID = "notes";
+/**
+ * The id bb installed this plugin under, which is NOT a constant: it is
+ * derived from the package name, so renaming the package renames the id and
+ * every RPC route with it. `__BB_PLUGIN_ID__` is the esbuild define
+ * `bb plugin build` stamps with the real id (see lib/portal-scope.ts); the
+ * content script also calls `setPluginId` with the id the host hands it, so
+ * the two agree even outside that build pipeline.
+ */
+declare const __BB_PLUGIN_ID__: string | undefined;
 
-export const rpc = createRpcClient<typeof rpcContract>(PLUGIN_ID);
+let pluginId =
+  typeof __BB_PLUGIN_ID__ === "string" ? __BB_PLUGIN_ID__ : "floating-notes";
+let client = createRpcClient<typeof rpcContract>(pluginId);
+
+export function setPluginId(id: string): void {
+  if (id === pluginId) return;
+  pluginId = id;
+  client = createRpcClient<typeof rpcContract>(id);
+}
+
+export const PLUGIN_ID = (): string => pluginId;
+
+/** Always routes through the current id, even if it is set after import. */
+export const rpc = {
+  call: ((method, ...args) =>
+    client.call(method, ...args)) as (typeof client)["call"],
+};
 
 export interface ClientConfig {
   shortcutEnabled: boolean;
