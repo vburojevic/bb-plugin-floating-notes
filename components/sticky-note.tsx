@@ -128,10 +128,12 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
   };
 
   return (
+    // role="region", not "dialog": bb treats any [role="dialog"][data-state="open"]
+    // on the page as an open modal and turns its keyboard shortcuts off, and a
+    // sticky stays on screen for as long as its thread is open.
     <div
       ref={rootRef}
-      role="dialog"
-      aria-modal="false"
+      role="region"
       aria-label={`Sticky note: ${displayTitle(note)}`}
       data-state={armed ? "open" : "closed"}
       data-collapsed={note.collapsed ? "true" : "false"}
