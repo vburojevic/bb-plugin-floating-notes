@@ -138,6 +138,12 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
       data-state={armed ? "open" : "closed"}
       data-collapsed={note.collapsed ? "true" : "false"}
       data-scope={scope.kind}
+      // Escape stays with the sticky. As a region it no longer reads as a
+      // modal, so bb would take an Escape typed here as its "Back to app"
+      // shortcut and leave Settings. The editor still sees it first.
+      onKeyDown={(event) => {
+        if (event.key === "Escape") event.stopPropagation();
+      }}
       className={cn(
         "bb-fn-sticky fixed flex flex-col overflow-hidden rounded-lg border border-border text-card-foreground shadow-xl",
         note.color !== null ? `bb-fn-tint-${note.color}` : "",
