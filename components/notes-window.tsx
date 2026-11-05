@@ -584,10 +584,17 @@ export function NotesWindow() {
           onPointerDown={hide}
         />
       ) : null}
+      {/* bb treats any [role="dialog"][data-state="open"] on the page as an
+          open modal and turns its keyboard shortcuts off. The floating window
+          sits beside bb like a sticky, so it is a labelled region and bb's
+          shortcuts keep working while it is open. The sheet covers the screen
+          behind a backdrop, so it stays a dialog and still holds them off.
+          Escape is stopped in onKeyDown either way, so bb never reads it as
+          "Back to app". */}
       <div
         ref={rootRef}
-        role="dialog"
-        aria-modal="false"
+        role={sheet ? "dialog" : "region"}
+        aria-modal={sheet ? "false" : undefined}
         aria-label="Floating notes"
         aria-hidden={!open}
         tabIndex={-1}
