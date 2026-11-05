@@ -128,14 +128,22 @@ export function StickyNote({ note, index }: { note: ListedNote; index: number })
   };
 
   return (
+    // role="region", not "dialog": bb treats any [role="dialog"][data-state="open"]
+    // on the page as an open modal and turns its keyboard shortcuts off, and a
+    // sticky stays on screen for as long as its thread is open.
     <div
       ref={rootRef}
-      role="dialog"
-      aria-modal="false"
+      role="region"
       aria-label={`Sticky note: ${displayTitle(note)}`}
       data-state={armed ? "open" : "closed"}
       data-collapsed={note.collapsed ? "true" : "false"}
       data-scope={scope.kind}
+      // Escape stays with the sticky. As a region it no longer reads as a
+      // modal, so bb would take an Escape typed here as its "Back to app"
+      // shortcut and leave Settings. The editor still sees it first.
+      onKeyDown={(event) => {
+        if (event.key === "Escape") event.stopPropagation();
+      }}
       className={cn(
         "bb-fn-sticky fixed flex flex-col overflow-hidden rounded-lg border border-border text-card-foreground shadow-xl",
         note.color !== null ? `bb-fn-tint-${note.color}` : "",
