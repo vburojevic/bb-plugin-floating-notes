@@ -3,7 +3,7 @@
 // this file is bundled into BOTH the server and the app, and the app build
 // cannot resolve the server SDK — `satisfies` gives the same exact typing
 // `defineRpcContract` (a typed identity) would, and vanishes at build.
-import type { PluginRpcContract } from "@bb/plugin-sdk/app";
+import type { PluginRpcContract } from "@get-bb/plugin-sdk/app";
 import { z } from "zod";
 
 /** Sticky palette slots; actual colors are theme-aware CSS. */

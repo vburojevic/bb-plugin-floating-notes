@@ -23,8 +23,8 @@
     "typecheck": "tsc --noEmit"
   },
   "engines": {
-    "bb": ">=0.42",
-    "bbPluginSdk": "^0.4.1"
+    "bb": ">=0.49",
+    "bbPluginSdk": ">=0.6.132"
   },
   "bb": {
     "name": "Floating Notes",
@@ -60,6 +60,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@get-bb/plugin-sdk": "0.6.132",
     "@radix-ui/react-dialog": "^1.1.19",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
