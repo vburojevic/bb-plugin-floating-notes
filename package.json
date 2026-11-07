@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-floating-notes",
-  "version": "1.2.3",
+  "version": "1.3.0",
   "description": "Floating notes for bb: a draggable notes window, stickies pinned to threads or projects, per-thread scratchpads, quick capture, and a live-markdown editor.",
   "license": "MIT",
   "author": "Vedran Burojević (https://github.com/vburojevic)",
