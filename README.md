@@ -234,13 +234,12 @@ lib/editor/                   the CodeMirror 6 live-markdown editor
 components/floating-notes.tsx the content-script root
 ```
 
-> [!IMPORTANT]
-> Four things worth knowing before changing it:
->
-> - **There is no bb React context in the content script.** `lib/rpc.ts` speaks the plugin RPC wire format directly, typed off the same contract. An app overlay in `app.tsx` relays bb's realtime signal and navigation to it.
-> - **The server owns the notes; the client caches.** Every surface renders from `lib/store.ts` and mutates through it. Server mutations run behind a mutex.
-> - **Theme-aware color is `light-dark()` or bb tokens only.** This plugin's Tailwind build has no `.dark` variant wired to bb's theme.
-> - **Do not trust a Tailwind utility bb does not use itself.** Our utilities compile into `@layer utilities`, and layered CSS loses to bb's unlayered app CSS. `w-60` once computed to the container width and pushed the whole editor off-screen; `size-2.5` collapsed a color swatch to a 2px speck. Anything load-bearing lives in `styles.css` under an unlayered `.bb-fn-*` class. Measure the computed value in the running app rather than trusting the class.
+**Four things worth knowing before changing it:**
+
+- **There is no bb React context in the content script.** `lib/rpc.ts` speaks the plugin RPC wire format directly, typed off the same contract. An app overlay in `app.tsx` relays bb's realtime signal and navigation to it.
+- **The server owns the notes; the client caches.** Every surface renders from `lib/store.ts` and mutates through it. Server mutations run behind a mutex.
+- **Theme-aware color is `light-dark()` or bb tokens only.** This plugin's Tailwind build has no `.dark` variant wired to bb's theme.
+- **Do not trust a Tailwind utility bb does not use itself.** Our utilities compile into `@layer utilities`, and layered CSS loses to bb's unlayered app CSS. `w-60` once computed to the container width and pushed the whole editor off-screen; `size-2.5` collapsed a color swatch to a 2px speck. Anything load-bearing lives in `styles.css` under an unlayered `.bb-fn-*` class. Measure the computed value in the running app rather than trusting the class.
 
 </details>
 
