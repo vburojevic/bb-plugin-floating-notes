@@ -38,6 +38,23 @@ bb plugin install git:https://github.com/vburojevic/bb-plugin-floating-notes
 
 ## What it does
 
+### Notes that follow the work
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/dark/stickies.png">
+  <img alt="Three stickies over a thread: one global, one pinned to a project, one pinned to the thread" src="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/light/stickies.png" width="100%">
+</picture>
+
+Pop any note out as a sticky. Drag it anywhere, snap it to an edge, collapse
+it to its title bar, or drop it into **reference mode**: translucent and
+click-through until you hover it, so a checklist can sit over an agent's
+output without getting in the way.
+
+A sticky can **pin to a thread** or to a **whole project**, and then it only
+appears while you are looking at that work. Every thread also gets a
+scratchpad, reachable from the thread header and the thread's side panel,
+that agents can append to while they work.
+
 <table>
 <tr>
 <td width="50%" valign="top">
@@ -63,28 +80,6 @@ to threads. Search understands operators too: `tag:api`, `in:scratchpads`,
 <td width="50%" valign="top">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/dark/stickies.png">
-  <img alt="Three stickies over a thread: one global, one pinned to a project, one pinned to the thread" src="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/light/stickies.png" width="100%">
-</picture>
-
-### Notes that follow the work
-
-Pop any note out as a sticky. Drag it anywhere, snap it to an edge, collapse
-it to its title bar, or drop it into **reference mode**: translucent and
-click-through until you hover it, so a checklist can sit over an agent's
-output without getting in the way.
-
-A sticky can **pin to a thread** or to a **whole project**, and then it only
-appears while you are looking at that work. Every thread also gets a
-scratchpad, reachable from the thread header and the thread's side panel,
-that agents can append to while they work.
-
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-
-<picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/dark/editor.png">
   <img alt="The editor showing a highlighted code fence and a wiki link" src="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/light/editor.png" width="100%">
 </picture>
@@ -103,14 +98,15 @@ deleted notes for 30 days, and images that lose their last reference are
 collected automatically.
 
 </td>
-<td width="50%" valign="top">
+</tr>
+</table>
+
+### Capture without leaving the thread
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/dark/capture.png">
   <img alt="The quick capture bar over a thread" src="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/light/capture.png" width="100%">
 </picture>
-
-### Capture without leaving the thread
 
 <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>'</kbd> opens a one-line bar over
 whatever you are doing. Type, press <kbd>Enter</kbd>, and it is saved and
@@ -121,19 +117,15 @@ From the timeline, **Save as note** keeps a message or a selection with a
 link back to the conversation it came from. The composer's **+** menu inserts
 a note into the draft, and `@note` mentions resolve fresh at send time.
 
-</td>
-</tr>
-</table>
-
 ### On a phone it becomes a sheet
 
 <table>
 <tr>
-<td width="50%" valign="top">
+<td width="50%" valign="top" align="center">
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/dark/mobile.png">
-  <img alt="The notes sheet on a phone" src="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/light/mobile.png" width="100%">
+  <img alt="The notes sheet on a phone" src="https://raw.githubusercontent.com/vburojevic/bb-plugin-floating-notes/main/docs/media/light/mobile.png" width="280">
 </picture>
 
 </td>
