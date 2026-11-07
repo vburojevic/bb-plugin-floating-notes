@@ -354,6 +354,11 @@ export function NotesWindow() {
       }
       if (event.key === "Escape") {
         event.stopPropagation();
+        // A menu, dialog or autocomplete inside the window already used this
+        // Escape to close itself (Radix layers preventDefault it on the
+        // document before it bubbles here through the React tree, portal or
+        // not). Closing the window too would take two layers down at once.
+        if (event.defaultPrevented) return;
         if (paletteOpen) setPaletteOpen(false);
         else hide();
       }
