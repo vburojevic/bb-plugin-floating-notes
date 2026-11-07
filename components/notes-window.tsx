@@ -341,7 +341,9 @@ export function NotesWindow() {
         void newNote();
         return;
       }
-      if (mod && event.key.toLowerCase() === "k") {
+      // ⌘K only: ⌘⇧K is the editor's Insert link and must not also toggle
+      // the palette.
+      if (mod && event.key.toLowerCase() === "k" && !event.shiftKey) {
         event.preventDefault();
         setPaletteOpen((current) => !current);
         return;
