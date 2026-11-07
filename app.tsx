@@ -95,7 +95,7 @@ function useHeaderData({ threadIds }: PluginThreadActionDataInput): HeaderData {
           const thread = await sdk.threads.get({ threadId });
           threadProjects.set(threadId, thread.projectId ?? null);
         } catch {
-          threadProjects.set(threadId, null);
+          // Not cached: the next change to the on-screen set asks again.
         }
       }),
     ).then(() => {
