@@ -130,7 +130,10 @@ export function NotesWindow() {
     // Never while an overlay owns the keyboard: the capture bar's textarea
     // and the palette's input both live outside this shell, so refocusing
     // here would yank the caret out of whatever the user is typing into.
-    if (!open || !mounted || paletteOpen || captureOpen) return;
+    // Wait for `armed` too: until then the shell is still data-state
+    // "closed", which is visibility: hidden, and focus() on a hidden element
+    // silently does nothing. That swallowed the first open of every page.
+    if (!open || !mounted || !armed || paletteOpen || captureOpen) return;
     const raf = window.requestAnimationFrame(() => {
       const root = rootRef.current;
       if (root === null) return;
@@ -141,7 +144,7 @@ export function NotesWindow() {
       root.focus();
     });
     return () => window.cancelAnimationFrame(raf);
-  }, [open, mounted, paletteOpen, captureOpen, rootRef]);
+  }, [open, mounted, armed, paletteOpen, captureOpen, rootRef]);
 
   // Only the sheet needs keyboard-aware geometry.
   useEffect(() => {
