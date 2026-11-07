@@ -215,10 +215,9 @@ and `import`. Run `bb notes --help` for usage.
 ```mermaid
 flowchart LR
   ui["Window, stickies,<br>capture bar, panels"] <--> store["lib/store.ts<br>client cache"]
-  store <-->|RPC| server["server.ts<br>SQLite + FTS5"]
+  store <-->|"RPC and realtime"| server["server.ts<br>SQLite + FTS5"]
   cli["bb notes CLI"] --> server
   agents["Agent tools"] --> server
-  server -->|realtime: notes changed| store
 ```
 
 ```
