@@ -1,12 +1,12 @@
 // A tiny external store for everything that drives the floating surfaces from
 // outside React: the sidebar footer button (host-rendered, no component), the
-// global shortcuts, the thread-header bridge, and the composer's plus-menu.
+// global shortcuts, the bb-tree bridge, and the composer's plus-menu.
 //
 // The thread registry is the visibility bridge for pinned stickies and the
-// scratchpad target: the thread-header slot mounts once per *visible* thread
-// (split panes mean several), registers here, and unregisters on unmount. The
-// front of the list is the most recently seen thread — "the" thread for
-// capture targeting.
+// scratchpad target: the thread-header action's data hook receives the ids of
+// every thread whose header is on screen (split panes mean several) and
+// publishes them here. The front of the list is the focused thread, then the
+// most recently seen one: "the" thread for capture targeting.
 
 export interface VisibleThread {
   threadId: string;
@@ -29,8 +29,8 @@ export interface ControllerState {
   visibleThreads: readonly VisibleThread[];
   /**
    * A thread the user asked to jump to. The content script cannot call
-   * useBbNavigate, so it posts the request here and any mounted bb-tree
-   * bridge (thread header, panels) executes and consumes it.
+   * useBbNavigate, so it posts the request here and the mounted bb-tree
+   * bridge (the app overlay) executes and consumes it.
    */
   navigateRequest: { threadId: string; seq: number } | null;
 }
@@ -47,6 +47,8 @@ let state: ControllerState = {
 };
 
 let navigateSeq = 0;
+/** Mounted bb-tree bridges able to execute a navigation request. */
+let navigators = 0;
 
 const listeners = new Set<Listener>();
 
@@ -94,17 +96,34 @@ export const controller = {
   },
 
   // ------------------------------------------------------------ threads
-  registerThread(threadId: string, projectId: string | null): () => void {
-    // One entry PER MOUNT, not per thread: the same thread open in two split
-    // panes registers twice, and closing one pane must not evict the other's
-    // registration. Readers tolerate duplicates.
-    const entry: VisibleThread = { threadId, projectId };
-    setState({ visibleThreads: [entry, ...state.visibleThreads] });
-    return () => {
-      setState({
-        visibleThreads: state.visibleThreads.filter((thread) => thread !== entry),
-      });
-    };
+  /**
+   * Replace the on-screen thread set. `focusedThreadId` (bb's current route
+   * thread) goes first; the rest keep the order they were first seen in,
+   * newest first, so capture targets the thread the user just opened.
+   */
+  setVisibleThreads(
+    threads: readonly VisibleThread[],
+    focusedThreadId: string | null = null,
+  ): void {
+    const incoming = new Map(threads.map((thread) => [thread.threadId, thread]));
+    const kept = state.visibleThreads
+      .filter((thread) => incoming.has(thread.threadId))
+      .map((thread) => incoming.get(thread.threadId)!);
+    const keptIds = new Set(kept.map((thread) => thread.threadId));
+    const added = threads.filter((thread) => !keptIds.has(thread.threadId));
+    let next = [...added, ...kept];
+    const focused = next.find((thread) => thread.threadId === focusedThreadId);
+    if (focused !== undefined) {
+      next = [focused, ...next.filter((thread) => thread !== focused)];
+    }
+    const same =
+      next.length === state.visibleThreads.length &&
+      next.every(
+        (thread, index) =>
+          thread.threadId === state.visibleThreads[index]!.threadId &&
+          thread.projectId === state.visibleThreads[index]!.projectId,
+      );
+    if (!same) setState({ visibleThreads: next });
   },
   activeThread(): VisibleThread | null {
     return state.visibleThreads[0] ?? null;
@@ -114,9 +133,16 @@ export const controller = {
   },
 
   // --------------------------------------------------------- navigation
+  /** A bb-tree bridge mounted; it executes navigation requests until disposed. */
+  registerNavigator(): () => void {
+    navigators += 1;
+    return () => {
+      navigators -= 1;
+    };
+  },
   /** Jump to a thread from anywhere; hard-navigates when no bridge exists. */
   openThread(threadId: string): void {
-    if (state.visibleThreads.length > 0) {
+    if (navigators > 0) {
       setState({ navigateRequest: { threadId, seq: ++navigateSeq } });
       return;
     }

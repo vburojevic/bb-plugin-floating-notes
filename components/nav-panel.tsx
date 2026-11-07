@@ -1,7 +1,6 @@
 // The nav panel: the full-page notes browser. Same list, same editor, same
 // vocabulary as the floating window — just given a whole route to breathe in.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRealtime } from "@bb/plugin-sdk/app";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -31,12 +30,6 @@ export function NotesNavPanel() {
   useEffect(() => {
     void notesStore.refresh();
   }, []);
-
-  // Instant sync: agent tools, the CLI, and other windows publish "changed".
-  useRealtime(
-    "notes",
-    useCallback(() => void notesStore.refresh(), []),
-  );
 
   const searchTimer = useRef<number | null>(null);
   /** Monotonic token: a late response for an old query/view must not land. */

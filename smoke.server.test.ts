@@ -6,7 +6,7 @@ import { join } from "node:path";
 import Database from "better-sqlite3";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@bb/plugin-sdk", () => ({}));
+vi.mock("@get-bb/plugin-sdk", () => ({}));
 
 import plugin from "./server";
 

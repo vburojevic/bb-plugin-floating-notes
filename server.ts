@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 // server for its duration (perf-watch traced a 79s handler to exactly that).
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
-import { type BbPluginApi } from "@bb/plugin-sdk";
+import { type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import {
   noteColorSchema,

@@ -10,7 +10,7 @@ import type {
   PluginRpcClient,
   PluginRpcContract,
   PluginRpcResult,
-} from "@bb/plugin-sdk/app";
+} from "@get-bb/plugin-sdk/app";
 
 export class PluginRpcCallError extends Error {
   readonly code: string;

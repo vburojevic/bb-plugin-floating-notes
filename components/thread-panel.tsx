@@ -1,7 +1,6 @@
 // The thread's side-panel tab: the scratchpad on top, then every note that
 // was captured from this thread.
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRealtime } from "@bb/plugin-sdk/app";
+import { useEffect, useMemo, useState } from "react";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,11 +18,6 @@ export function ThreadNotesPanel({ threadId }: { threadId: string }) {
   const { notes } = useNotesState();
   const [scratchpadId, setScratchpadId] = useState<string | null>(null);
   const compact = useIsCompactViewport();
-
-  useRealtime(
-    "notes",
-    useCallback(() => void notesStore.refresh(), []),
-  );
 
   useEffect(() => {
     void notesStore.refresh();

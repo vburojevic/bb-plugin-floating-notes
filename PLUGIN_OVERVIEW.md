@@ -48,7 +48,7 @@ collected automatically.
 
 ## Requirements
 
-Requires bb 0.42 or newer. No account, no API key, and no external service —
+Requires bb 0.49 or newer. No account, no API key, and no external service —
 notes live in a SQLite database inside bb's own data directory, and nothing
 leaves the machine. Stickies are a desktop surface; on a phone the window
 becomes a full-height sheet instead.

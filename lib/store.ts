@@ -94,7 +94,7 @@ function setState(patch: Partial<NotesState>): void {
   emit();
 }
 
-/** RPC snapshots are JSON. Keep unchanged branches so idle polls do not
+/** RPC snapshots are JSON. Keep unchanged branches so idle refreshes do not
  * invalidate every mounted editor, sticky, and picker. Compare strings in
  * place rather than serializing note bodies into another large string. */
 function shareUnchanged<T>(previous: T, next: T): T {
@@ -169,7 +169,7 @@ export const notesStore = {
    * Pull the server's view. A call landing while a request is in flight
    * queues ONE follow-up run: the in-flight response predates whatever
    * mutation prompted the new call, so applying it alone would clobber the
-   * optimistic upsert with a stale snapshot until the next poll.
+   * optimistic upsert with a stale snapshot until the next refresh.
    */
   refresh(): Promise<void> {
     if (inflight !== null) {
